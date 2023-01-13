@@ -1,0 +1,5 @@
+MWII Semantics
+unk_semantic_0x0, colourMap/specularMap
+unk_semantic_0x4, normalMap/glossMap/occlusionMap
+unk_semantic_0xC, alphaMap
+unk_semantic_0x1D, thermalMap

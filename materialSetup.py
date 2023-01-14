@@ -89,10 +89,10 @@ def ConvertGlossToRough():
         
 
 def CreateImageNode(Node2d="Node2dTemp",Place2dNode="Place2dNodeTemp"):
-    mel.eval('shadingNode -asTexture -isColorManaged file;')
-    cmds.rename(cmds.ls(selection=True), str(Node2d))
-    mel.eval('shadingNode -asUtility place2dTexture;')
-    cmds.rename(cmds.ls(selection=True), str(Place2dNode))
+    imageNode = mel.eval('shadingNode -asTexture -isColorManaged file;')
+    cmds.rename(imageNode, str(Node2d))
+    image2dNode = mel.eval('shadingNode -asUtility place2dTexture;')
+    cmds.rename(image2dNode, str(Place2dNode))
     print(Place2dNode, Node2d)
     cmds.connectAttr( str(Place2dNode)+'.coverage', str(Node2d)+'.coverage', force=True)
     cmds.connectAttr( str(Place2dNode)+'.translateFrame', str(Node2d)+'.translateFrame', force=True)
@@ -234,8 +234,8 @@ def SetupMaterialTreyarch():
             if not cmds.objExists(gMap):
                 CreateImageNode(str(gMap),"Place2"+str(gMap))
                 cmds.setAttr(str(gMap) + ".fileTextureName", cMapFP + gMap + FileType, type="string")
-                mel.eval('shadingNode -asTexture ramp;')
-                cmds.rename(cmds.ls(selection=True), str(gMap) + "_ramp")
+                glossNode = mel.eval('shadingNode -asTexture ramp;')
+                cmds.rename(glossNode, str(gMap) + "_ramp")
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[1].position", 1)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[2].position", 0)
@@ -257,8 +257,8 @@ def SetupMaterialTreyarch():
             if not cmds.objExists(nMap):
                 CreateImageNode(str(nMap),"Place2"+str(nMap))
                 cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
-            mel.eval('shadingNode -asTexture RedshiftBumpMap;')
-            cmds.rename(cmds.ls(selection=True), str(MatName) + "_bump")
+            bumpNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
+            cmds.rename(bumpNode, str(MatName) + "_bump")
             cmds.setAttr(str(MatName) + "_bump.inputType", 1)
             cmds.setAttr(str(MatName) + "_bump.flipY", 1)
             cmds.setAttr(str(MatName) + "_bump.scale", 1)
@@ -270,8 +270,8 @@ def SetupMaterialTreyarch():
                     CreateImageNode(str(dnMap),"Place2"+str(dnMap))
                     cmds.setAttr(str(dnMap) + ".fileTextureName", cMapFP + dnMap + FileType, type="string")
                 cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-                mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-                cmds.rename(cmds.ls(selection=True), str(MatName) + "_bumpLayer")
+                detailNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+                cmds.rename(detailNode, str(MatName) + "_bumpLayer")
                 cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
                 cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + "_bumpLayer" + ".layer1_color")
                 cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
@@ -279,8 +279,8 @@ def SetupMaterialTreyarch():
                 cmds.setAttr(str(dnMap) + ".colorSpace", "Raw", type="string")
             elif os.path.exists(cMapFP + dnMask + FileType) and dnMask != "$mask" and dnMask != "$black_multimask":
                 cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-                mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-                cmds.rename(cmds.ls(selection=True), str(MatName) + "_bumpLayer")
+                maskNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+                cmds.rename(maskNode, str(MatName) + "_bumpLayer")
                 cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
                 if not cmds.objExists(dnMap1) and dnMap1 != "$identitynormalmap" and dnMap1 != "$normal":
                     CreateImageNode(str(dnMap1),"Place2"+str(dnMap1))
@@ -368,22 +368,16 @@ OSLText = '''
     }'''
 
 def SetupMaterial_S4_IW9():
-    # global MatName
-    # global FileType
-    # global OSLText
-
     csMap = ""
-    aoMap = ""
     nMap = ""
     gMap = ""
-    sMap = ""
     eMap = ""
     oMap = ""
+    sssMap = ""
     dnMask = ""
     dnMap1 = ""
     dnMap2 = ""
     dnMap3 = ""
-    dnMap4 = ""
     ngoMapUF = ""
     eMapUF = ""
     oMapUF = ""
@@ -391,7 +385,8 @@ def SetupMaterial_S4_IW9():
     dnMap1UF = ""
     dnMap2UF = ""
     dnMap3UF = ""
-    dnMap4UF = ""
+    sssMapUF = ""
+    isSkinMaterial = False
 
     colorSemantic = {
     'Vangaurd': 'unk_semantic_0x0',
@@ -408,6 +403,10 @@ def SetupMaterial_S4_IW9():
     emmisiveSemantic = {
         'Vangaurd': 'unk_semantic_0x10',
         'Modern Warfare II': 'INSERT_EMMISIVE_HERE'}
+
+    subsurfaceSemantic = {
+        'Vangaurd': 'unk_semantic_0x6F',
+        'Modern Warfare II': 'unk_semantic_0x26'}
 
     detailMaskSemantic = {
         'Vangaurd': 'unk_semantic_0x9F',
@@ -442,13 +441,9 @@ def SetupMaterial_S4_IW9():
     for elements in sList:
         if sList[i][0] == colorSemantic[Game]:
             csMap = sList[i][1].partition("&")[0]
-            sMap = sList[i][1].partition("~")[0].partition("&")[2]
             csMapUF = sList[i][1]
         elif sList[i][0] == ngoSemantic[Game]:
-            # nMap = sList[i][1].partition("&")[0]
-            # gMap = sList[i][1].partition("~")[0].partition("&")[2].partition("&")[2]
-            # aoMap = sList[i][1].partition("~")[0].partition("&")[2][:-1] + "o"
-            ngoMap = sList[i][1].replace('~','')
+            ngoMap = sList[i][1].replace('~','').partition("&")[0]
             ngoMapUF = sList[i][1]
         elif sList[i][0] == emmisiveSemantic[Game]:
             eMap = sList[i][1].partition("~")[0]
@@ -456,6 +451,9 @@ def SetupMaterial_S4_IW9():
         elif sList[i][0] == opacitySemantic[Game]:
             oMap = sList[i][1].partition("~")[0]
             oMapUF = sList[i][1]
+        elif sList[i][0] == subsurfaceSemantic[Game]:
+            sssMap = sList[i][1].partition("~")[0].partition("&")[0]
+            sssMapUF = sList[i][1].partition("~")[0]
         elif sList[i][0] == detailMaskSemantic[Game]:
             dnMask = sList[i][1].partition("~")[0].partition("&")[0]
             dnMaskUF = sList[i][1]
@@ -468,13 +466,8 @@ def SetupMaterial_S4_IW9():
         elif sList[i][0] == detail3Semantic[Game]:
             dnMap3 = sList[i][1].partition("&")[0]
             dnMap3UF = sList[i][1]
-        # elif sList[i][0] == "detailNormal4":
-        #     dnMap4 = sList[i][1]
         i = i + 1
     print("Colour and Specular Map: " + csMap + "\n" + "Normal, Gloss and Occlusion Map: " + ngoMapUF + "\n" + "Normal Mask: " + dnMask)
-    print("Normal: " + nMap)
-    print("Gloss: " + gMap)
-    print("Occlusion: " + aoMap)
     textOpen.close()
 
     if cmds.checkBox("image_folder", q=True, v=True) == True:
@@ -482,12 +475,22 @@ def SetupMaterial_S4_IW9():
     elif cmds.checkBox("image_folder", q=True, v=True) == False:
         cMapFP = MatDirectory + "/_images/"
 
+    # if sssMap != 'ximage_3c29eeff15212c37' and sssMap != '':
+    #     isSkinMaterial = True
+
+    # if isSkinMaterial == True and cmds.nodeType(MatName) != 'RedshiftSkin':
+    #     cmds.rename(MatName,str(MatName) + '_temp')
+    #     skinNode = cmds.createNode('RedshiftSkin')
+    #     cmds.rename(skinNode, MatName)
+    #     cmds.connectAttr(MatName + '.outColor', cmds.listConnections(str(MatName) + '_temp.outColor', destination=True)[0] + '.surfaceShader', force=True)
+    #     cmds.delete(str(MatName) + '_temp')
+
     ## Color Map
-    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black":
+    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black" and isSkinMaterial == False:
         if not cmds.objExists(csMap):
             CreateImageNode(str(csMap),"Place2"+str(csMap))
-            mel.eval('shadingNode -asUtility reverse;')
-            cmds.rename(cmds.ls(selection=True), str(csMap) + "_alpha_reverse")
+            colorNode = mel.eval('shadingNode -asUtility reverse;')
+            cmds.rename(colorNode, str(csMap) + "_alpha_reverse")
             # Connect colorMapAlpha to reverse node
             cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_alpha_reverse" + ".inputX")
             cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_alpha_reverse" + ".inputY")
@@ -507,15 +510,16 @@ def SetupMaterial_S4_IW9():
         cmds.setAttr(str(MatName) + ".diffuse_color", 0, 0, 0)
 
     ## Specular Map
-    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black":
+    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black" and isSkinMaterial == False:
         print("Specular Map exists")
         if not cmds.objExists(csMap):
             CreateImageNode(str(csMap),"Place2"+str(csMap))
             print("Specular Map Node created")
         if not cmds.objExists(str(csMap) + '_specularLayer'):
             # Creates color layer
-            mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-            cmds.rename(cmds.ls(selection=True), str(csMap) + "_specularLayer")
+            print("Specular Layer Created")
+            colorLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+            cmds.rename(colorLayerNode, str(csMap) + "_specularLayer")
             cmds.setAttr(str(csMap) + "_specularLayer" + ".base_color", 0.22, 0.22, 0.22)
             # Connects Color Map to Color Layer
             cmds.connectAttr(str(csMap) + ".outColor", str(csMap) + "_specularLayer" + ".layer1_color")
@@ -528,6 +532,21 @@ def SetupMaterial_S4_IW9():
         cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
         cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
 
+    # if isSkinMaterial == True and os.path.exists(cMapFP + csMapUF + FileType):
+    #     if not cmds.objExists(csMap):
+    #         CreateImageNode(str(csMap),"Place2"+str(csMap))
+    #     if not cmds.objExists(sssMap):
+    #         CreateImageNode(str(sssMap),"Place2"+str(sssMap))
+    #     if not cmds.objExists(str(csMap) + '_ShallowCC'):
+    #         shallowNode = cmds.createNode('RedshiftColorCorrection')
+    #         cmds.rename(shallowNode, str(csMap) + '_ShallowCC')
+    #         cmds.connectAttr(str(csMap) + '.outColor', str(csMap) + '_ShallowCC' + '.input')
+    #         cmds.setAttr(str(csMap) + '_ShallowCC' + '.hue', 5)
+    #         cmds.setAttr(str(csMap) + '_ShallowCC' + '.saturation', .8)
+    #     cmds.connectAttr(str(sssMap) + '.outColor', str(MatName) + '.deep_color')
+    #     cmds.connectAttr(str(csMap) + '.outColor', str(MatName) + '.mid_color')
+    #     cmds.connectAttr(str(csMap) + '_ShallowCC' + '.outColor', str(MatName) + '.shallow_color')
+
     ## Gloss Map
     if os.path.exists(cMapFP + ngoMapUF + FileType) and gMap != "$black":
         if not cmds.objExists(ngoMap):
@@ -535,14 +554,17 @@ def SetupMaterial_S4_IW9():
             cmds.setAttr(str(ngoMap) + ".fileTextureName", cMapFP + ngoMapUF + FileType, type="string")
             cmds.setAttr(str(ngoMap) + ".colorSpace", "Raw", type="string")
         if not cmds.objExists(str(ngoMap) + '_ramp'):
-            mel.eval('shadingNode -asTexture ramp;')
-            cmds.rename(cmds.ls(selection=True), str(ngoMap) + "_ramp")
+            rampNode = mel.eval('shadingNode -asTexture ramp;')
+            cmds.rename(rampNode, str(ngoMap) + "_ramp")
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].position", 1)
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].position", 0)
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].color", 0, 0, 0)
             cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + "_ramp" + ".vCoord")
-        cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + ".refl_roughness")
+        if isSkinMaterial ==True:
+            cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + ".refl_gloss0")
+        else:
+            cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + ".refl_roughness")
         
         ConvertGlossToRough()
 
@@ -558,8 +580,8 @@ def SetupMaterial_S4_IW9():
             cmds.setAttr(str(ngoMap) + "_OSLConverter" + ".sourceText", OSLText, type="string")
             cmds.connectAttr(str(ngoMap) + ".outColorG", str(ngoMap) + "_OSLConverter" + ".inColorR")
             cmds.connectAttr(str(ngoMap) + ".outAlpha", str(ngoMap) + "_OSLConverter" + ".inColorG")
-            mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
-            cmds.rename(cmds.ls(selection=True), str(ngoMap) + "_OSLConverterCC")
+            ngoNode = mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
+            cmds.rename(ngoNode, str(ngoMap) + "_OSLConverterCC")
             cmds.connectAttr(str(ngoMap) + "_OSLConverter" + ".outColor", str(ngoMap) + "_OSLConverterCC" + ".input")
             cmds.setAttr(str(ngoMap) + "_OSLConverterCC" + ".contrast", 0.75)
         if not cmds.objExists(str(ngoMap) + '_bump'):
@@ -576,21 +598,21 @@ def SetupMaterial_S4_IW9():
                     if not cmds.objExists(dnMap1):
                         CreateImageNode(str(dnMap1),"Place2"+str(dnMap1))
                         cmds.setAttr(str(dnMap1) + ".fileTextureName", cMapFP + dnMap1UF + FileType, type="string")
-                        mel.eval('shadingNode -asShader RedshiftOSLShader;')   
-                        cmds.rename(cmds.ls(selection=True), str(dnMap1) + "_OSLConverter")
+                        oslNode = mel.eval('shadingNode -asShader RedshiftOSLShader;')   
+                        cmds.rename(oslNode, str(dnMap1) + "_OSLConverter")
                         cmds.setAttr(str(dnMap1) + "_OSLConverter" + ".sourceText", OSLText, type="string")
-                        mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
-                        cmds.rename(cmds.ls(selection=True), str(dnMap1) + "_OSLConverterCC")
+                        oslNode = mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
+                        cmds.rename(oslNode, str(dnMap1) + "_OSLConverterCC")
                         cmds.connectAttr(str(dnMap1) + ".outColorG", str(dnMap1) + "_OSLConverter" + ".inColorR")
                         cmds.connectAttr(str(dnMap1) + ".outAlpha", str(dnMap1) + "_OSLConverter" + ".inColorG")
                         cmds.connectAttr(str(dnMap1) + "_OSLConverter" + ".outColor", str(dnMap1) + "_OSLConverterCC" + ".input")
                         print("Detail Map created and connected to colour correct node")
                         cmds.setAttr(str(dnMap1) + "_OSLConverterCC" + ".contrast", 0.75)
                         cmds.setAttr(str(dnMap1) + ".colorSpace", "Raw", type="string")
-                    cmds.disconnectAttr(str(nMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bump" + ".input")
-                    mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-                    cmds.rename(cmds.ls(selection=True), str(MatName) + "_bumpLayer")
-                    cmds.connectAttr(str(nMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
+                    cmds.disconnectAttr(str(ngoMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bump" + ".input")
+                    detailLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+                    cmds.rename(detailLayerNode, str(MatName) + "_bumpLayer")
+                    cmds.connectAttr(str(ngoMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
                     cmds.connectAttr(str(dnMap1) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".layer1_color")
                     cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
                     cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_blend_mode", 1)
@@ -598,11 +620,11 @@ def SetupMaterial_S4_IW9():
                         if not cmds.objExists(dnMap2):
                             CreateImageNode(str(dnMap2),"Place2"+str(dnMap2))
                             cmds.setAttr(str(dnMap2) + ".fileTextureName", cMapFP + dnMap2UF + FileType, type="string")
-                            mel.eval('shadingNode -asShader RedshiftOSLShader;')   
-                            cmds.rename(cmds.ls(selection=True), str(dnMap2) + "_OSLConverter")
+                            detail2Node = mel.eval('shadingNode -asShader RedshiftOSLShader;')   
+                            cmds.rename(detail2Node, str(dnMap2) + "_OSLConverter")
                             cmds.setAttr(str(dnMap2) + "_OSLConverter" + ".sourceText", OSLText, type="string")
-                            mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
-                            cmds.rename(cmds.ls(selection=True), str(dnMap2) + "_OSLConverterCC")
+                            detail2CCNode = mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
+                            cmds.rename(detail2CCNode, str(dnMap2) + "_OSLConverterCC")
                             cmds.connectAttr(str(dnMap2) + ".outColorG", str(dnMap2) + "_OSLConverter" + ".inColorR")
                             cmds.connectAttr(str(dnMap2) + ".outAlpha", str(dnMap2) + "_OSLConverter" + ".inColorG")
                             cmds.connectAttr(str(dnMap2) + "_OSLConverter" + ".outColor", str(dnMap2) + "_OSLConverterCC" + ".input")
@@ -616,11 +638,11 @@ def SetupMaterial_S4_IW9():
                         if not cmds.objExists(dnMap3):
                             CreateImageNode(str(dnMap3),"Place2"+str(dnMap3))
                             cmds.setAttr(str(dnMap3) + ".fileTextureName", cMapFP + dnMap3UF + FileType, type="string")
-                            mel.eval('shadingNode -asShader RedshiftOSLShader;')   
-                            cmds.rename(cmds.ls(selection=True), str(dnMap3) + "_OSLConverter")
+                            detail3Node = mel.eval('shadingNode -asShader RedshiftOSLShader;')   
+                            cmds.rename(detail3Node, str(dnMap3) + "_OSLConverter")
                             cmds.setAttr(str(dnMap3) + "_OSLConverter" + ".sourceText", OSLText, type="string")
-                            mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
-                            cmds.rename(cmds.ls(selection=True), str(dnMap3) + "_OSLConverterCC")
+                            detail3CCNode = mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
+                            cmds.rename(detail3CCNode, str(dnMap3) + "_OSLConverterCC")
                             cmds.connectAttr(str(dnMap3) + ".outColorG", str(dnMap3) + "_OSLConverter" + ".inColorR")
                             cmds.connectAttr(str(dnMap3) + ".outAlpha", str(dnMap3) + "_OSLConverter" + ".inColorG")
                             cmds.connectAttr(str(dnMap3) + "_OSLConverter" + ".outColor", str(dnMap3) + "_OSLConverterCC" + ".input")
@@ -649,7 +671,7 @@ def SetupMaterial_S4_IW9():
                 cmds.setAttr(str(MatName) + ".emission_weight", 1)
 
         # ## Opacity Map
-        if os.path.exists(cMapFP + oMapUF + FileType) and oMap != "$black" and oMap != 'ximage_3c29eeff15212c37':
+        if os.path.exists(cMapFP + oMapUF + FileType) and oMap != "$black" and oMap != 'ximage_3c29eeff15212c37' and isSkinMaterial == False:
                 if not cmds.objExists(oMap):
                     CreateImageNode(str(oMap),"Place2"+str(oMap))
                 cmds.connectAttr(str(oMap) + ".outColor", MatName + ".opacity_color")
@@ -790,8 +812,8 @@ def SetupMaterialH1():
             if not cmds.objExists(nMap):
                 CreateFileNode(str(nMap))
                 cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
-            mel.eval('shadingNode -asTexture RedshiftBumpMap;')
-            cmds.rename(cmds.ls(selection=True), str(MatName) + "_bump")
+            normalNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
+            cmds.rename(normalNode, str(MatName) + "_bump")
             cmds.setAttr(str(MatName) + "_bump.inputType", 1)
             cmds.setAttr(str(MatName) + "_bump.flipY", 1)
             cmds.setAttr(str(MatName) + "_bump.scale", 1)
@@ -807,8 +829,8 @@ def SetupMaterialH1():
                     cmds.connectAttr(str(dnMap) + ".outColor", detailNode + ".inColor")
                     cmds.rename(detailNode, str(dnMap) + "_OSLConverter")
                 cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-                mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-                cmds.rename(cmds.ls(selection=True), str(MatName) + "_bumpLayer")
+                normalLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+                cmds.rename(normalLayerNode, str(MatName) + "_bumpLayer")
                 cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
                 cmds.connectAttr(str(dnMap) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer1_colorR")
                 cmds.connectAttr(str(dnMap) + ".outColorG", str(MatName) + "_bumpLayer" + ".layer1_colorG")
@@ -1003,7 +1025,7 @@ def createWindow():
     parentToLayout()
     addDoubleRowLayout()
     addText('Material Text File: ')
-    addFileBrowser("models_path", 2, 'Test placeholder text', 'Select any of the material text files')
+    addFileBrowser("models_path", 2, 'Test placeholder text', 'Select assets folder')
     parentToLayout()
 
     addDoubleRowLayout()

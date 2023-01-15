@@ -122,9 +122,6 @@ def Filter(map):
 
 
 def SetupMaterialTreyarch():
-    global MatName
-    global FileType
-    FileType = "." + cmds.optionMenu('image_type', q=True, v=True).lower()
     cMap = ""
     aoMap = ""
     nMap = ""
@@ -138,7 +135,7 @@ def SetupMaterialTreyarch():
     dnMap3 = ""
     dnMap4 = ""
     cFile = MatDirectory + "/" + MatName + "_images.txt"
-    print("Material: " + MatName)
+    # print("Material: " + MatName)
     textOpen = open(cFile, "r")
     fList = textOpen.readlines()
     sList = []
@@ -151,7 +148,7 @@ def SetupMaterialTreyarch():
         print(semantic_temp)
         i = i + 1
     sList[0].remove("semantic")
-    print(sList)
+    # print(sList)
     i=0
     for elements in sList:
         if sList[i][0] == "colorMap":
@@ -577,6 +574,7 @@ def SetupMaterial_S4_IW9():
         if not cmds.objExists(str(ngoMap) + "_OSLConverter"):
             OSLShader = mel.eval('shadingNode -asShader RedshiftOSLShader;')
             cmds.rename(OSLShader, str(ngoMap) + "_OSLConverter")
+            removeFromShaderList(str(ngoMap) + "_OSLConverter")
             cmds.setAttr(str(ngoMap) + "_OSLConverter" + ".sourceText", OSLText, type="string")
             cmds.connectAttr(str(ngoMap) + ".outColorG", str(ngoMap) + "_OSLConverter" + ".inColorR")
             cmds.connectAttr(str(ngoMap) + ".outAlpha", str(ngoMap) + "_OSLConverter" + ".inColorG")
@@ -853,6 +851,60 @@ def SetupMaterialH1():
             print("Emmision Map failed")
         
 
+####################################################
+###### Extra Options ######
+####################################################
+
+def addToShaderList(node):
+    connections = cmds.listConnections('defaultShaderList1.s')
+    cmds.connectAttr(str(node) + '.msg', 'defaultShaderList1.s[' + str(len(connections) + 101)+ ']')
+
+def removeFromShaderList(node):
+    cmds.disconnectAttr(str(node) + '.msg', 'defaultShaderList1.s', nextAvailable=True)
+
+def setupSkin():
+    Mats = cmds.ls(selection=True)
+    # print(Mats)
+    for mat in Mats:
+        if cmds.nodeType(mat) == 'RedshiftMaterial':
+            if cmds.nodeType(cmds.listConnections(str(mat) + '.diffuse_color')[0]) == 'RedshiftColorLayer':
+                colorNode = cmds.listConnections(str(cmds.listConnections(str(mat) + '.diffuse_color')[0]) + '.layer1_color')[0]
+                print(colorNode)
+            if cmds.nodeType(cmds.listConnections(str(mat) + '.diffuse_color')[0]) == 'file':
+                colorNode = cmds.listConnections(str(mat) + '.diffuse_color')[0]
+            shadingNode:str = cmds.listConnections(str(mat) + '.outColor')[0]
+            bumpNode:str = cmds.listConnections(str(mat) + '.bump_input')[0]
+            glossNode:str = cmds.listConnections(str(mat) + '.refl_roughness')[0]
+            cmds.rename(mat,str(mat) + '_RM')
+            skinNode = cmds.createNode('RedshiftSkin', name= mat)
+            addToShaderList(skinNode)
+            print("Material Created: " + skinNode)
+
+            deepCNode = cmds.createNode('RedshiftColorCorrection', name= str(mat) + '_deepCC')
+            addToShaderList(deepCNode)
+            cmds.connectAttr(str(colorNode) + '.outColor', str(mat) + '_deepCC' + '.input')
+            cmds.setAttr(str(mat) + '_deepCC' + '.hue', 355)
+            cmds.setAttr(str(mat) + '_deepCC' + '.saturation', 1.2)
+
+            shallowCNode = cmds.createNode('RedshiftColorCorrection', name= str(mat) + '_shallowCC')
+            addToShaderList(shallowCNode)
+            cmds.connectAttr(str(colorNode) + '.outColor', str(mat) + '_shallowCC' + '.input')
+            cmds.setAttr(str(mat) + '_shallowCC' + '.hue', 5)
+            cmds.setAttr(str(mat) + '_shallowCC' + '.saturation', 0.8)
+
+            cmds.connectAttr(str(mat) + '_deepCC' + '.outColor', str(mat) + '.deep_color')
+            cmds.connectAttr(str(colorNode) + '.outColor', str(mat) + '.mid_color')
+            cmds.connectAttr(str(mat) + '_shallowCC' + '.outColor', str(mat) + '.shallow_color')
+        
+            cmds.connectAttr(str(bumpNode) + '.out', str(mat) + '.bump_input')
+            cmds.connectAttr(str(glossNode) + '.outColorR', str(mat) + '.refl_gloss0')
+            cmds.connectAttr(str(mat) + '.outColor', str(shadingNode) + '.surfaceShader', force=True)
+
+            cmds.setAttr(str(mat) + '.refl_weight0', 0.6)
+
+            # mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
+            # cmds.delete(str(mat) + '_RM')
+
 WINDOW_TITLE = "Call of Duty Material Tool"
 WINDOW_WIDTH = 400
 
@@ -1024,7 +1076,7 @@ def createWindow():
     addOptionMenu("game","", ["Modern Warfare Remastered", "Black Ops 4", "Black Ops Cold War", "Vangaurd", "Modern Warfare II"])
     parentToLayout()
     addDoubleRowLayout()
-    addText('Material Text File: ')
+    addText('Assets Folder: ')
     addFileBrowser("models_path", 2, 'Test placeholder text', 'Select assets folder')
     parentToLayout()
 
@@ -1053,8 +1105,15 @@ def createWindow():
     parentToLayout()
 
     addButton( 'Start', "Main()")
+    addSpacer()
 
-    # addFrameColumnLayout('Other Functions', True)
+    addFrameColumnLayout('Other Options', True)
+    parentToLayout()
+
+    # addDoubleRowLayout()
+    addSpacer()
+    addButton( 'Setup Skin Materials', "setupSkin()")
+    parentToLayout()
     
     cmds.showWindow('windowObject')
 deleteIfOpen()

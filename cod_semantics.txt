@@ -1,14 +1,16 @@
 MWII Semantics
 unk_semantic_0x0, colourMap/specularMap
 unk_semantic_0x4, normalMap/glossMap/occlusionMap
-unk_semantic_0xC, alphaMap
+unk_semantic_0xC, opacityMap
 unk_semantic_0x1D, thermalMap
+unk_semantic_0x26, subsurfaceMap (default ximage_3c29eeff15212c37)
 
 s4_semantics
 unk_semantic_0x0, colourMap/specularMap (or unk_semantic_0xC0)
 unk_semantic_0x8, normalMap/glossMap/occlusionMap (or unk_semantic_0xC1)
 unk_semantic_0x10, emmisiveMap
-unk_semantic_0x18, occlusionMap
+unk_semantic_0x18, opacityMap
+unk_semantic_0x6F, subsurfaceMap
 unk_semantic_0x9F, detailMask
 unk_semantic_0x9, detailMap1
 unk_semantic_0xA, detailMap2

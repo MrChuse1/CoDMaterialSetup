@@ -19,7 +19,7 @@ MatList = []
 FileType = ""
 MatProgress = 0
 Game = ''
-REngine = 'Arnold'
+REngine = ''
 
 MatDiffuse={
     "Redshift":".diffuse_color",
@@ -113,71 +113,77 @@ def Main():
     global MatDirectory
     global MatProgress
     global FileType
+    global REngine
     modelsPath = cmds.textField("models_path", q=True, tx=True)
     # modelsPath = "I:\\Scripts\\Test\\xmodels"
     modelsFolders = os.listdir(str(modelsPath))
     # print(modelsFolders)
     FileType = "." + cmds.optionMenu('image_type', q=True, v=True).lower()
+    REngine = cmds.optionMenu('render', q=True, v=True)
     # print("FileType: " + FileType)
     # cmds.progressWindow(title="Material Converter",status="Importing...",progress=0,ii=False)
+    models = []
     for folder in modelsFolders:
-        models = os.listdir(str(modelsPath))
+    
+        if not folder.__contains__('.'):
+            models.append(folder)
+    print(models)
+    # for folder in models:
         # print(models)
-        for model in models:
-            # print("Model: ", model)
-            if not model.__contains__('.'):
-                modelFiles = os.listdir(str(modelsPath + '/' + model))
-                for file in modelFiles:
-                    if file.endswith("_images.txt"):
-                        MatList.append(str(file[:-len("_images.txt")]))
-                cmds.progressWindow(edit=True,status="Model: " + folder)
-            # print(MatList)
-            
-            for Material in MatList:
-                MatName = Material
-                MatDirectory = modelsPath + '/' + model
-                # print("Material: ", MatName)
-                if  cmds.objExists(MatName) and MatName != "lambert1":
-                    # print("Node Type: " + str(cmds.nodeType(MatName)))
-                    
-                    if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != "RedshiftMaterial" and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
-                        if REngine == 'Redshift':
-                            materialNode = mel.eval('''rsCreateShadingNode "rendernode/redshift/shader/surface" "-asShader" "" RedshiftMaterial;''')
-                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                            print(modelSG)
-                            cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
-                            cmds.delete(MatName)
-                            cmds.rename(materialNode, MatName)
-                            print("Material Created: " + MatName)
- 
-                        if REngine == 'Arnold':
-                            materialNode = cmds.shadingNode('aiStandardSurface', asShader=True)
-                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                            print(modelSG)
-                            cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
-                            cmds.delete(MatName)
-                            cmds.rename(materialNode, MatName)
-                            print("Material Created: " + MatName)
-                        
-                        mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
-                        Game = cmds.optionMenu('game', q=True, v=True)
-                        # print("Game: " + Game)
-                        if Game == "Black Ops Cold War" or Game == "Black Ops 4":
-                            SetupMaterialTreyarch()
-                        if Game == "Vangaurd" or Game == 'Modern Warfare II':
-                            SetupMaterial_S4_IW9()
-                        if Game == "Modern Warfare Remastered":
-                            SetupMaterialH1()
-                        cmds.progressWindow(edit=True,progress=int(MatProgress/len(modelsFolders)))
-                        MatProgress = MatProgress + 1
-                else:
-                    print(MatName, " does not exist.")
+    for model in models:
+        print("Model: ", model)
+        if not model.__contains__('.'):
+            modelFiles = os.listdir(str(modelsPath + '/' + model))
+            for file in modelFiles:
+                if file.endswith("_images.txt"):
+                    MatList.append(str(file[:-len("_images.txt")]))
+            cmds.progressWindow(edit=True,status="Model: " + folder)
+            print('Materials: ', MatList)
 
 
-                    
+    # for mat in MatList:
+    #     print('Material: ', mat)
+        for MatName in MatList:
+            print('==================', MatName, '=====================')
+            MatDirectory = modelsPath + '/' + model
+            # print("Material: ", MatName)
+            if  cmds.objExists(MatName) and MatName != "lambert1":
+                # print("Node Type: " + str(cmds.nodeType(MatName)))
+                
+                if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != "RedshiftMaterial" and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
+                    if REngine == 'Redshift':
+                        materialNode = mel.eval('''rsCreateShadingNode "rendernode/redshift/shader/surface" "-asShader" "" RedshiftMaterial;''')
+                        modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        # print(modelSG)
+                        cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
+                        cmds.delete(MatName)
+                        cmds.rename(materialNode, MatName)
+                        print("Material Created: " + MatName)
 
+                    if REngine == 'Arnold':
+                        materialNode = cmds.shadingNode('aiStandardSurface', asShader=True)
+                        modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        # print(modelSG)
+                        cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
+                        cmds.delete(MatName)
+                        cmds.rename(materialNode, MatName)
+                        print("Material Created: " + MatName)
                     
-            MatList.clear()
+                    mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
+                    Game = cmds.optionMenu('game', q=True, v=True)
+                    print("Game: " + Game)
+                    if Game == "Black Ops Cold War" or Game == "Black Ops 4":
+                        SetupMaterialTreyarch()
+                    if Game == "Vangaurd" or Game == 'Modern Warfare II':
+                        SetupMaterial_S4_IW9()
+                    if Game == "Modern Warfare Remastered":
+                        SetupMaterialH1()
+                    cmds.progressWindow(edit=True,progress=int(MatProgress/len(modelsFolders)))
+                    MatProgress = MatProgress + 1
+            else:
+                print(MatName, " does not exist.")
+
+        MatList.clear()
 
         
 
@@ -287,7 +293,7 @@ def SetupMaterialTreyarch():
         cMapFP = MatDirectory + "/_images/"
     
     ## Color Map
-    if os.path.exists(cMapFP + cMap + FileType) and cMap != "$black_color" and cMap != "$white_diffuse" and cMap != "$blacktransparent_color":
+    if os.path.exists(str(cMapFP + cMap + FileType)) and cMap != "$black_color" and cMap != "$white_diffuse" and cMap != "$blacktransparent_color":
         if not cmds.objExists(cMap):
             CreateImageNode(str(cMap),"Place2"+str(cMap))
         cmds.connectAttr(str(cMap) + ".outColor", MatName + str(MatDiffuse[REngine]))
@@ -342,7 +348,7 @@ def SetupMaterialTreyarch():
 
     # Gloss Map
     if os.path.exists(cMapFP + gMap + FileType) and gMap != "$gloss" and gMap != "$white_gloss" and gMap != "$black" and gMap != "$black_gloss":
-        try:
+        # try:
             if not cmds.objExists(gMap):
                 CreateImageNode(str(gMap),"Place2"+str(gMap))
                 cmds.setAttr(str(gMap) + ".fileTextureName", cMapFP + gMap + FileType, type="string")
@@ -352,17 +358,29 @@ def SetupMaterialTreyarch():
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[2].position", 0)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[2].color", 0, 0, 0)
-                cmds.connectAttr(str(gMap) + ".outColorR", str(gMap) + "_ramp" + ".vCoord")
+                if REngine =='Arnold':
+                    reverseNode = mel.eval('shadingNode -asTexture reverse;')
+                    cmds.rename(reverseNode, str(gMap) + '_reverse')
+                    cmds.connectAttr(str(gMap) + ".outColorR", str(gMap) + '_reverse.inputX')
+                    cmds.connectAttr(str(gMap) + '_reverse.outputX', str(gMap) + "_ramp" + ".vCoord")
+                if REngine == 'Redshift':
+                    cmds.connectAttr(str(gMap) + ".outColorR", str(gMap) + "_ramp" + ".vCoord")
             cmds.connectAttr(str(gMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
             cmds.setAttr(str(gMap) + ".colorSpace", "Raw", type="string")
-        except:
-            print("Gloss map not found")
+        # except:
+        #     print("Gloss map not found")
     elif gMap == "$gloss":
         cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.23)
+        if REngine == 'Arnold':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.77)
     elif gMap == "$white_gloss":
         cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
+        if REngine == 'Arnold':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
     elif gMap == "$black" or gMap == "$black_gloss":
         cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
+        if REngine == 'Arnold':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
     
     if os.path.exists(cMapFP + nMap + FileType) and nMap != "$identitynormalmap" and nMap != "$normal":
         # try:
@@ -372,8 +390,8 @@ def SetupMaterialTreyarch():
                 cmds.setAttr(str(nMap) + ".colorSpace", "Raw", type="string")
             if REngine == 'Redshift':
                 bumpNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
-                cmds.setAttr(bumpNode + "_bump.scale", 1)
-                cmds.setAttr(bumpNode + "_bump.inputType", 1)
+                cmds.setAttr(bumpNode + ".scale", 1)
+                cmds.setAttr(bumpNode + ".inputType", 1)
             elif REngine == 'Arnold':
                 bumpNode = mel.eval('shadingNode -asTexture aiNormalMap')
             
@@ -484,7 +502,7 @@ def SetupMaterialTreyarch():
             if os.path.exists(cMapFP + eMap + FileType) and cMap != "$black_color":
                 if not cmds.objExists(eMap):
                     CreateImageNode(str(eMap),"Place2"+str(eMap))
-                cmds.connectAttr(str(eMap) + ".outColor", MatName + ".emission_color")
+                cmds.connectAttr(str(eMap) + ".outColor", MatName + MatEmmision[REngine])
                 cmds.setAttr(str(eMap) + ".fileTextureName", cMapFP + eMap + FileType, type="string")
                 cmds.setAttr(str(MatName) + ".emission_weight", 1)
             # except:
@@ -1219,6 +1237,10 @@ def createWindow():
     cmds.text(label='<span style=\"color:#ccc;text-decoration:none;font-size:px;font-family:courier new;font-weight:bold;\">' + "Created by <a href=\"https://twitter.com/MrChuse\" style=\"color:purple\"> MrChuse</a>" + '</span>', hyperlink=True)
     addSpacer()
         
+    addDoubleRowLayout()
+    addText('Render Engine: ')
+    addOptionMenu("render","", ['Arnold', 'Redshift'])
+    parentToLayout()
     addFrameColumnLayout('Material Attributes', False)
 
     addDoubleRowLayout()

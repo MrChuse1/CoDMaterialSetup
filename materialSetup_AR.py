@@ -1040,7 +1040,7 @@ def SetupMaterialH1():
 
     # Normal Map
     if os.path.exists(cMapFP + nMap + FileType) and nMap != "$identitynormalmap" and nMap != "$normal":
-        # try:
+        try:
             if not cmds.objExists(nMap):
                 CreateFileNode(str(nMap))
                 cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
@@ -1084,8 +1084,8 @@ def SetupMaterialH1():
                 cmds.connectAttr(str(MatName) + "_bumpLayer" + '.outColor', str(MatName) + "_bump" + ".input")
                 
                 
-        # except:
-        #     print("Normal Map failed")
+        except:
+            print("Normal Map failed")
 
     # Emissive Map
     if os.path.exists(cMapFP + eMap + FileType) and cMap != "$black_color":

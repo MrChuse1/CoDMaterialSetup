@@ -11,6 +11,20 @@ import os as os
 import csv
 from pathlib import Path
 import glob
+try:
+    from PIL import Image
+except:
+    DR = cmds.confirmDialog(title="Material Converter", message="It seems you haven't installed this library to your Maya. Would you like to install it and restart Maya?", button=["Yes","No"], defaultButton="Yes")
+    os.system("mayapy -m pip install Pillow")
+    if DR == "Yes":
+        cmds.quit()
+
+
+
+#########################
+## Fix Roughness Mats
+## Add IW9 Support
+########################
 
 textPath = ""
 MatName = ""
@@ -19,16 +33,13 @@ MatList = []
 FileType = ""
 MatProgress = 0
 Game = ''
-REngine = 'Arnold'
+REngine = ''
+NoNormals = []
 
 MatDiffuse={
     "Redshift":".diffuse_color",
     "Arnold":".baseColor",
-}
-
-MatOut={
-    "Redshift":".outcolor",
-    "Arnold":".outColor",
+    "USD": ".diffuseColor",
 }
 
 MatSpec={
@@ -36,26 +47,112 @@ MatSpec={
     "Arnold":".specular",
 }
 
+MatSpecColor={
+    "Redshift":".refl_reflectivity",
+    "Arnold":".specularColor",
+    "USD": ".specularColor",
+}
+
+MatMetallic={
+    "Redshift":".refl_metalness",
+    "Arnold":".metalness",
+    "USD": ".metallic",
+}
+
 MatRough={
     "Redshift":".refl_roughness",
     "Arnold":".specularRoughness",
+    "USD": ".roughness",
+}
+
+MatSheen={
+    "Redshift":".sheen_weight",
+    "Arnold":".sheen",
+}
+
+MatSheenRough={
+    "Redshift":".sheen_roughness",
+    "Arnold":".sheenRoughness",
 }
 
 MatBump={
     "Redshift":".bump_input",
     "Arnold":".normalCamera",
+    "USD": ".normal",
 }
 
+MatBumpY={
+    "Redshift":".flipY",
+    "Arnold":".invertY",
+}
+
+MatBumpOut={
+    "Redshift":".out",
+    "Arnold":".outValue",
+}
+
+BumpL1={
+    "Redshift":".base_color",
+    "Arnold":".input1",
+    "USD": ".normal0",
+}
+BumpL2={
+    "Redshift":".layer1_color",
+    "Arnold":".input2",
+    "USD": ".normal1",
+}
+BumpL3={
+    "Redshift":".layer2_color",
+    "Arnold":".input3",
+    "USD": ".normal2",
+}
+BumpL4={
+    "Redshift":".layer3_color",
+    "Arnold":".input4",
+}
+
+BumpMixL1={
+    "Redshift":".layer1_mask",
+    "Arnold":".mix2",
+}
+BumpMixL2={
+    "Redshift":".layer2_mask",
+    "Arnold":".mix3",
+}
+BumpMixL3={
+    "Redshift":".layer3_mask",
+    "Arnold":".mix4",
+}
+
+BumpE1={
+    "Redshift":".layer1_enable",
+    "Arnold":".enable2",
+}
+
+BumpE2={
+    "Redshift":".layer2_enable",
+    "Arnold":".enable3",
+}
+BumpE3={
+    "Redshift":".layer3_enable",
+    "Arnold":".enable4",
+}
 MatOpacity={
     "Redshift":".opacity_color",
     "Arnold":".opacity",
+    "USD": ".opacity",
 }
 
 MatEmmision={
     "Redshift":".emission_color",
-    "Arnold":".emission",
+    "Arnold":".emissionColor",
+    "USD": ".emissiveColor",
 }
 
+OSLNodeText={
+    "Redshift":".sourceText",
+    "Arnold":".code",
+}
 def Main():
     global modelsPath
     global modelsFolders
@@ -65,75 +162,90 @@ def Main():
     global MatDirectory
     global MatProgress
     global FileType
+    global REngine
     modelsPath = cmds.textField("models_path", q=True, tx=True)
     # modelsPath = "I:\\Scripts\\Test\\xmodels"
     modelsFolders = os.listdir(str(modelsPath))
     # print(modelsFolders)
     FileType = "." + cmds.optionMenu('image_type', q=True, v=True).lower()
+    REngine = cmds.optionMenu('render', q=True, v=True)
     # print("FileType: " + FileType)
     # cmds.progressWindow(title="Material Converter",status="Importing...",progress=0,ii=False)
+    models = []
     for folder in modelsFolders:
-        models = os.listdir(str(modelsPath))
+        if not folder.__contains__('.'):
+            models.append(folder)
+    print(models)
+    # for folder in models:
         # print(models)
-        for model in models:
-            # print("Model: ", model)
-            if not model.__contains__('.'):
-                modelFiles = os.listdir(str(modelsPath + '/' + model))
-                for file in modelFiles:
-                    if file.endswith("_images.txt"):
-                        MatList.append(str(file[:-len("_images.txt")]))
-                cmds.progressWindow(edit=True,status="Model: " + folder)
-            # print(MatList)
-            
-            for Material in MatList:
-                MatName = Material
-                MatDirectory = modelsPath + '/' + model
-                # print("Material: ", MatName)
-                if  cmds.objExists(MatName) and MatName != "lambert1":
-                    # print("Node Type: " + str(cmds.nodeType(MatName)))
+    for model in models:
+        print("Model: ", model)
+        if not model.__contains__('.'):
+            modelFiles = os.listdir(str(modelsPath + '/' + model))
+            for file in modelFiles:
+                if file.endswith("_images.txt"):
+                    MatList.append(str(file[:-len("_images.txt")]))
+            cmds.progressWindow(edit=True,status="Model: " + folder)
+            # print('Materials: ', MatList)
+
+
+    # for mat in MatList:
+    #     print('Material: ', mat)
+        for MatName in MatList:
+            # print('==================', MatName, '=====================')
+            MatDirectory = modelsPath + '/' + model
+            # print("Material: ", MatName)
+            if  cmds.objExists(MatName) and MatName != "lambert1":
+                # print("Node Type: " + str(cmds.nodeType(MatName)))
+                
+                if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != "RedshiftMaterial" and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
                     if REngine == 'Redshift':
-                        if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != "RedshiftMaterial" and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
-                            materialNode = mel.eval('''rsCreateShadingNode "rendernode/redshift/shader/surface" "-asShader" "" RedshiftMaterial;''')
-                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                            print(modelSG)
-                            cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
-                            cmds.delete(MatName)
-                            cmds.rename(materialNode, MatName)
-                            print("Material Created: " + MatName)
-                        else:
-                            print(MatName, " does not exist.")
+                        # materialNode = mel.eval('''rsCreateShadingNode "rendernode/redshift/shader/surface" "-asShader" "" RedshiftMaterial;''')
+                        materialNode = cmds.shadingNode('RedshiftMaterial', asShader=True)
+                        modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        # print(modelSG)
+                        # cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
+                        # cmds.delete(MatName)
+                        # cmds.rename(materialNode, MatName)
+                        # print("Material Created: " + MatName)
 
-                    elif REngine == 'Arnold':
-                        if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != 'RedshiftMaterial' and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
-                            materialNode = cmds.shadingNode('aiStandardSurface', asShader=True)
-                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                            print(modelSG)
-                            cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
-                            cmds.delete(MatName)
-                            cmds.rename(materialNode, MatName)
-                            print("Material Created: " + MatName)
+                    if REngine == 'Arnold':
+                        materialNode = cmds.shadingNode('aiStandardSurface', asShader=True)
+                        modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        # print(modelSG)
 
-                        mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
-                        Game = cmds.optionMenu('game', q=True, v=True)
-                        # print("Game: " + Game)
-                        if Game == "Black Ops Cold War" or Game == "Black Ops 4":
-                            SetupMaterialTreyarch()
-                        if Game == "Vangaurd" or Game == 'Modern Warfare II':
-                            SetupMaterial_S4_IW9()
-                        if Game == "Modern Warfare Remastered":
-                            SetupMaterialH1()
-                        cmds.progressWindow(edit=True,progress=int(MatProgress/len(modelsFolders)))
-                        MatProgress = MatProgress + 1
-            MatList.clear()
+                    if REngine == 'USD':
+                        materialNode = cmds.shadingNode('usdPreviewSurface', asShader=True)
+                        modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                    cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
+                    cmds.delete(MatName)
+                    cmds.rename(materialNode, MatName)
+                    print("Material Created: " + MatName)
+                    
+                    mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
+                    Game = cmds.optionMenu('game', q=True, v=True)
+                    # print("Game: " + Game)
+                    if Game == "Black Ops Cold War" or Game == "Black Ops 4":
+                        SetupMaterialTreyarch()
+                    if Game == "Vangaurd" or Game == 'Modern Warfare II':
+                        SetupMaterial_S4_IW9()
+                    if Game == "Modern Warfare Remastered":
+                        SetupMaterialH1()
+                    cmds.progressWindow(edit=True,progress=int(MatProgress/len(modelsFolders)))
+                    MatProgress = MatProgress + 1
+            else:
+                print(MatName, " does not exist.")
 
+        MatList.clear()
+
+    print("Thse Materials have no Normal Maps: \n", NoNormals)
         
 
-    else:
-        print(MatName, " does not exist.")
+
 
 def ConvertGlossToRough():
     global MatName
-    if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+    if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True and REngine == 'Redshift':
         cmds.setAttr(MatName + ".refl_isGlossiness", 1)
         
 
@@ -142,7 +254,7 @@ def CreateImageNode(Node2d="Node2dTemp",Place2dNode="Place2dNodeTemp"):
     cmds.rename(imageNode, str(Node2d))
     image2dNode = mel.eval('shadingNode -asUtility place2dTexture;')
     cmds.rename(image2dNode, str(Place2dNode))
-    print(Place2dNode, Node2d)
+    # print(Place2dNode, Node2d)
     cmds.connectAttr( str(Place2dNode)+'.coverage', str(Node2d)+'.coverage', force=True)
     cmds.connectAttr( str(Place2dNode)+'.translateFrame', str(Node2d)+'.translateFrame', force=True)
     cmds.connectAttr( str(Place2dNode)+'.rotateFrame', str(Node2d)+'.rotateFrame', force=True)
@@ -169,6 +281,20 @@ def CreateFileNode(name):
 def Filter(map):
     return map.replace("~","").replace("-","_").replace("$","").replace("&","")
 
+def has_transparency(img):
+    if img.info.get("transparency", None) is not None:
+        return True
+    if img.mode == "P":
+        transparent = img.info.get("transparency", -1)
+        for _, index in img.getcolors():
+            if index == transparent:
+                return True
+    elif img.mode == "RGBA":
+        extrema = img.getextrema()
+        if extrema[3][0] < 255:
+            return True
+
+    return False
 
 def SetupMaterialTreyarch():
     cMap = ""
@@ -194,7 +320,7 @@ def SetupMaterialTreyarch():
         semantic_replace = semantic_temp[1]
         semantic_temp[1] = semantic_replace[:-1]
         sList.append(semantic_temp)
-        print(semantic_temp)
+        # print(semantic_temp)
         i = i + 1
     sList[0].remove("semantic")
     # print(sList)
@@ -217,7 +343,7 @@ def SetupMaterialTreyarch():
         elif sList[i][0] == "detailNormalMask":
             dnMask = sList[i][1]
         elif sList[i][0] == "detailNormal1":
-            dnMap1 = sList[i][1]
+            dnMap = sList[i][1]
         elif sList[i][0] == "detailNormal2":
             dnMap2 = sList[i][1]
         elif sList[i][0] == "detailNormal3":
@@ -234,161 +360,249 @@ def SetupMaterialTreyarch():
         cMapFP = MatDirectory + "/_images/"
     
     ## Color Map
-    if os.path.exists(cMapFP + cMap + FileType) and cMap != "$black_color" and cMap != "$white_diffuse" and cMap != "$blacktransparent_color":
+    if os.path.exists(str(cMapFP + cMap + FileType)) and cMap != "$black_color" and cMap != "$white_diffuse" and cMap != "$blacktransparent_color" and cMap != "$color_black_40":
         if not cmds.objExists(cMap):
             CreateImageNode(str(cMap),"Place2"+str(cMap))
-        cmds.connectAttr(str(cMap) + ".outColor", MatName + ".diffuse_color")
+            cmds.setAttr(str(cMap) + ".fileTextureName", cMapFP + cMap + FileType, type="string")
+        cmds.connectAttr(str(cMap) + ".outColor", MatName + str(MatDiffuse[REngine]))
         if cmds.checkBox("enable_alpha", q=True, v=True) == True:
-            cmds.connectAttr(str(cMap) + ".outAlpha", MatName + ".opacity_colorR")
-            cmds.connectAttr(str(cMap) + ".outAlpha", MatName + ".opacity_colorG")
-            cmds.connectAttr(str(cMap) + ".outAlpha", MatName + ".opacity_colorB")
-        cmds.setAttr(str(cMap) + ".fileTextureName", cMapFP + cMap + FileType, type="string")
+            if REngine != 'USD':
+                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine] + 'R'))
+                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine] + 'G'))
+                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine] + 'B'))
+            else:
+                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine]))
+        
     elif cMap == "$white_diffuse":
-        cmds.setAttr(str(MatName) + ".diffuse_color", 1, 1, 1)
-    elif cMap == "$black_diffuse" or cMap == "$black" or cMap == "$black_color":
-        cmds.setAttr(str(MatName) + ".diffuse_color", 0, 0, 0)
-    if os.path.exists(cMapFP + sMap + FileType) and sMap != "$specular" and sMap != "$white_specular":
+        cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 1, 1, 1)
+    elif cMap == "$black_diffuse" or cMap == "$black" or cMap == "$black_color" or cMap == "$color_black_40":
+        cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 0, 0, 0)
+
+    # Specular Map
+    if os.path.exists(cMapFP + sMap + FileType) and sMap != "$specular" and sMap != "$white_specular" and sMap != "$specular_mask":
         if not cmds.objExists(sMap):
             CreateImageNode(str(sMap),"Place2"+str(sMap))
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1) # 1 - Colour Edge & Tint
-        cmds.connectAttr(str(sMap) + ".outColor", MatName + ".refl_reflectivity")
-        cmds.setAttr(str(sMap) + ".fileTextureName", cMapFP + sMap + FileType, type="string")
-        cmds.setAttr(str(MatName) + ".refl_edge_tintR", 1, clamp=True)
-        cmds.setAttr(str(MatName) + ".refl_edge_tintG", 1, clamp=True)
-        cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
-    elif sMap == "$specular":
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
-        cmds.setAttr(str(MatName) + ".refl_reflectivity", 0.23, 0.23, 0.23)
-    elif sMap == "$white_specular":
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
-        cmds.setAttr(str(MatName) + ".refl_reflectivity", 1, 1, 1)
-    elif not os.path.exists(cMapFP + sMap + FileType):
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 3) # 3 - IOR
+            cmds.setAttr(str(sMap) + ".fileTextureName", cMapFP + sMap + FileType, type="string")
+            
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1) # 1 - Colour Edge & Tint
+            cmds.setAttr(str(MatName) + ".refl_edge_tintR", 1, clamp=True)
+            cmds.setAttr(str(MatName) + ".refl_edge_tintG", 1, clamp=True)
+            cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
+        
+        
+        cmds.connectAttr(str(sMap) + ".outColor", MatName + str(MatSpecColor[REngine]))
 
+    elif sMap == "$specular":
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
+        cmds.setAttr(str(MatName) + str(MatSpecColor[REngine]), 0.23, 0.23, 0.23)
+    elif sMap == "$white_specular" or sMap == "$specular_mask":
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
+        cmds.setAttr(str(MatName) + str(MatSpecColor[REngine]), 1, 1, 1)
+    elif not os.path.exists(cMapFP + sMap + FileType):
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 3) # 3 - IOR
+
+    # AO Map
     if os.path.exists(cMapFP + aoMap + FileType) and aoMap != "$white_ao" and aoMap != "$occlusion_black" and aoMap != "$occlusion_50" and aoMap != "$occlusion":
         try:
-            CreateImageNode(str(aoMap),"Place2"+str(aoMap))
-            cmds.connectAttr(str(aoMap) + ".outColor", MatName + ".overall_color")
-            cmds.setAttr(str(aoMap) + ".fileTextureName", cMapFP + aoMap + FileType, type="string")
+            if not cmds.objExists(aoMap):
+                CreateImageNode(str(aoMap),"Place2"+str(aoMap))
+                cmds.setAttr(str(aoMap) + ".fileTextureName", cMapFP + aoMap + FileType, type="string")
+            if REngine == 'Redshift':
+                cmds.connectAttr(str(aoMap) + ".outColor", MatName + ".overall_color")
+            if REngine == 'USD':
+                cmds.connectAttr(str(aoMap) + ".outColorR", MatName + ".occlusion")   
         except:
             print("Gloss map not found")
     elif aoMap == "$black" or aoMap == "$occlusion_black":
         cmds.setAttr(str(MatName) + ".overall_color", 0, 0, 0)
 
-    if os.path.exists(cMapFP + gMap + FileType) and gMap != "$gloss" and gMap != "$white_gloss" and gMap != "$black" and gMap != "$black_gloss":
-        try:
+    # Gloss Map
+    if os.path.exists(cMapFP + gMap + FileType) and gMap != "$gloss" and gMap != "$white_gloss" and gMap != "$black" and gMap != "$black_gloss" and gMap != "$gray" and gMap != "$color_black_40":
+        # try:
             if not cmds.objExists(gMap):
                 CreateImageNode(str(gMap),"Place2"+str(gMap))
                 cmds.setAttr(str(gMap) + ".fileTextureName", cMapFP + gMap + FileType, type="string")
+                cmds.setAttr(str(gMap) + ".colorSpace", "Raw", type="string")
                 glossNode = mel.eval('shadingNode -asTexture ramp;')
                 cmds.rename(glossNode, str(gMap) + "_ramp")
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[1].position", 1)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[2].position", 0)
                 cmds.setAttr(str(gMap) + "_ramp.colorEntryList[2].color", 0, 0, 0)
-                cmds.connectAttr(str(gMap) + ".outColorR", str(gMap) + "_ramp" + ".vCoord")
-            cmds.connectAttr(str(gMap) + "_ramp" + ".outColorR", MatName + ".refl_roughness")
-            cmds.setAttr(str(gMap) + ".colorSpace", "Raw", type="string")
-        except:
-            print("Gloss map not found")
-    elif gMap == "$gloss":
-        cmds.setAttr(str(MatName) + ".refl_roughness", 0.23)
+                if REngine =='Arnold' or REngine == 'USD' and bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                    reverseNode = mel.eval('shadingNode -asTexture reverse;')
+                    cmds.rename(reverseNode, str(gMap) + '_reverse')
+                    cmds.connectAttr(str(gMap) + ".outColorR", str(gMap) + '_reverse.inputX')
+
+                if REngine == 'Redshift':
+                    cmds.connectAttr(str(gMap) + ".outColorR", str(gMap) + "_ramp" + ".vCoord")
+                
+                if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                    if REngine =='Arnold':
+                        cmds.connectAttr(str(gMap) + '_reverse.outputX', str(gMap) + "_ramp" + ".vCoord")
+                    if REngine == 'USD':
+                        cmds.connectAttr(str(gMap) + '_reverse.outputX', MatName + MatRough[REngine])
+                
+                if REngine =='Arnold':
+                        cmds.connectAttr(str(gMap) + '.outColorR', str(gMap) + "_ramp" + ".vCoord")
+                if REngine == 'USD':
+                    cmds.connectAttr(str(gMap) + '.outColorR', MatName + MatRough[REngine])
+            
+            if REngine != 'USD':
+                cmds.connectAttr(str(gMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
+            
+        # except:
+        #     print("Gloss map not found")
+    elif gMap == "$gloss" or gMap == "gray" or gMap == "$color_black_40":
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.23)
+        if REngine == 'Arnold' or REngine == 'USD':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.77)
     elif gMap == "$white_gloss":
-        cmds.setAttr(str(MatName) + ".refl_roughness", 1)
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
+        if REngine == 'Arnold':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
+        if REngine == 'USD':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.001)
     elif gMap == "$black" or gMap == "$black_gloss":
-        cmds.setAttr(str(MatName) + ".refl_roughness", 0)
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
+        if REngine == 'Arnold' or REngine == 'USD':
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
     
     if os.path.exists(cMapFP + nMap + FileType) and nMap != "$identitynormalmap" and nMap != "$normal":
-        try:
+        # try:
             if not cmds.objExists(nMap):
                 CreateImageNode(str(nMap),"Place2"+str(nMap))
                 cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
-            bumpNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
-            cmds.rename(bumpNode, str(MatName) + "_bump")
-            cmds.setAttr(str(MatName) + "_bump.inputType", 1)
-            cmds.setAttr(str(MatName) + "_bump.flipY", 1)
-            cmds.setAttr(str(MatName) + "_bump.scale", 1)
-            cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-            cmds.connectAttr(str(MatName) + "_bump" + ".out", MatName + ".bump_input")
-            cmds.setAttr(str(nMap) + ".colorSpace", "Raw", type="string")
-            if os.path.exists(cMapFP + dnMap + FileType) and dnMap != "$identitynormalmap" and dnMap != "$normal":
-                if not cmds.objExists(dnMap):
-                    CreateImageNode(str(dnMap),"Place2"+str(dnMap))
-                    cmds.setAttr(str(dnMap) + ".fileTextureName", cMapFP + dnMap + FileType, type="string")
-                cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-                detailNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+                cmds.setAttr(str(nMap) + ".colorSpace", "Raw", type="string")
+            if REngine == 'Redshift':
+                bumpNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
+                cmds.setAttr(bumpNode + ".scale", 1)
+                cmds.setAttr(bumpNode + ".inputType", 1)
+            elif REngine == 'Arnold':
+                bumpNode = mel.eval('shadingNode -asTexture aiNormalMap')
+            
+            if REngine != 'USD':
+                cmds.rename(bumpNode, str(MatName) + "_bump")
+                cmds.setAttr(str(MatName) + '_bump' + str(MatBumpY[REngine]), 1)
+                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
+                cmds.connectAttr(str(MatName) + "_bump" + str(MatBumpOut[REngine]), MatName + str(MatBump[REngine]))
+            else:
+                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + MatBump[REngine])
+            # print('Attempting to create detail map')
+
+    # print((cMapFP + dnMap + FileType).replace('\\','\\\\'))
+    # if os.path.exists((cMapFP + dnMap + FileType).replace('\\','\\\\')):
+    #     print('Detail Map detected')
+    if not cmds.objExists(str(MatName) + "_bumpLayer") and os.path.exists((cMapFP + dnMask + FileType).replace('\\','\\\\')) or os.path.exists((cMapFP + dnMap + FileType).replace('\\','\\\\')):
+        # print('Function starting..')
+        if not cmds.objExists(str(MatName) + "_bumpLayer") and REngine != 'USD':
+                if REngine == 'Redshift':
+                    detailNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+                    cmds.setAttr(detailNode + ".layer1_blend_mode", 1)
+                if REngine == 'Arnold':
+                    detailNode = mel.eval('shadingNode -asTexture aiLayerRgba')
+                    cmds.setAttr(str(detailNode) + '.enable2', 1)
                 cmds.rename(detailNode, str(MatName) + "_bumpLayer")
-                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
-                cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + "_bumpLayer" + ".layer1_color")
-                cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
-                cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_blend_mode", 1)
-                cmds.setAttr(str(dnMap) + ".colorSpace", "Raw", type="string")
-            elif os.path.exists(cMapFP + dnMask + FileType) and dnMask != "$mask" and dnMask != "$black_multimask":
                 cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-                maskNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-                cmds.rename(maskNode, str(MatName) + "_bumpLayer")
-                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
-                if not cmds.objExists(dnMap1) and dnMap1 != "$identitynormalmap" and dnMap1 != "$normal":
-                    CreateImageNode(str(dnMap1),"Place2"+str(dnMap1))
-                    cmds.setAttr(str(dnMap1) + ".fileTextureName", cMapFP + dnMap1 + FileType, type="string")
-                    cmds.setAttr(str(dnMap1) + ".colorSpace", "Raw", type="string")
-                if not cmds.objExists(dnMap2) and dnMap2 != "$identitynormalmap" and dnMap2 != "$normal":
-                    CreateImageNode(str(dnMap2),"Place2"+str(dnMap2))
-                    cmds.setAttr(str(dnMap2) + ".fileTextureName", cMapFP + dnMap2 + FileType, type="string")
-                    cmds.setAttr(str(dnMap2) + ".colorSpace", "Raw", type="string")
-                if not cmds.objExists(dnMap3) and dnMap3 != "$identitynormalmap" and dnMap3 != "$normal":
-                    CreateImageNode(str(dnMap3),"Place2"+str(dnMap3))
-                    cmds.setAttr(str(dnMap3) + ".fileTextureName", cMapFP + dnMap3 + FileType, type="string")
-                    cmds.setAttr(str(dnMap3) + ".colorSpace", "Raw", type="string")
-                if not cmds.objExists(dnMap4) and dnMap4 != "$identitynormalmap" and dnMap4 != "$normal":
-                    CreateImageNode(str(dnMap4),"Place2"+str(dnMap4))
-                    cmds.setAttr(str(dnMap4) + ".fileTextureName", cMapFP + dnMap4 + FileType, type="string")
-                    cmds.setAttr(str(dnMap4) + ".colorSpace", "Raw", type="string")
+                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL1[REngine]))
+                cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
+                
+        if os.path.exists(cMapFP + dnMap + FileType) and dnMap != "$identitynormalmap" and dnMap != "$normal" and dnMap != '':
+            if not cmds.objExists(dnMap):
+                CreateImageNode(str(dnMap),"Place2"+str(dnMap))
+                cmds.setAttr(str(dnMap) + ".fileTextureName", cMapFP + dnMap + FileType, type="string")
+                cmds.setAttr(str(dnMap) + ".colorSpace", "Raw", type="string")
+                # print('Detail Map Created')
+            
+            if REngine != 'USD':
+                cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL2[REngine]))
+                cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE1[REngine]), 1)
+            
+        if os.path.exists(cMapFP + dnMap2 + FileType) and dnMap2 != "$identitynormalmap" and dnMap2 != "$normal" and dnMap2 != '':
+            if not cmds.objExists(dnMap2):
+                CreateImageNode(str(dnMap2),"Place2"+str(dnMap2))
+                cmds.setAttr(str(dnMap2) + ".fileTextureName", cMapFP + dnMap2 + FileType, type="string")
+                cmds.setAttr(str(dnMap2) + ".colorSpace", "Raw", type="string")
+                # print('Detail Map Created')
+
+            if REngine != 'USD':
+                cmds.connectAttr(str(dnMap2) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL3[REngine]))
+                cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE2[REngine]), 1)
+
+        if os.path.exists(cMapFP + dnMap3 + FileType) and dnMap3 != "$identitynormalmap" and dnMap3 != "$normal" and dnMap3 != '':
+            if not cmds.objExists(dnMap3):
+                CreateImageNode(str(dnMap3),"Place2"+str(dnMap3))
+                cmds.setAttr(str(dnMap3) + ".fileTextureName", cMapFP + dnMap3 + FileType, type="string")
+                cmds.setAttr(str(dnMap3) + ".colorSpace", "Raw", type="string")
+                # print('Detail Map Created')
+
+            if REngine != 'USD':
+                cmds.connectAttr(str(dnMap3) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL3[REngine]))
+                cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE3[REngine]), 1)
+
+        if os.path.exists(cMapFP + dnMask + FileType) and dnMask != "$mask" and dnMask != "$black_multimask":
+            
+            if not cmds.objExists(dnMask) and dnMask != '$mask':
                 CreateImageNode(str(dnMask),"Place2"+str(dnMask))
                 cmds.setAttr(str(dnMask) + ".fileTextureName", cMapFP + dnMask + FileType, type="string")
-                cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_enable", 0)
-                if dnMap1 != "$identitynormalmap" and dnMap1 != "$normal":
-                    try:
-                        cmds.connectAttr(str(dnMap1) + ".outColor", str(MatName) + "_bumpLayer" + ".layer1_color")
-                        cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer1_alpha")
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_enable", 1)
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_blend_mode", 1)
-                    except:
-                        print("Detail Map 1 skipped")
-                if dnMap2 != "$identitynormalmap" and dnMap2 != "$normal":
-                    try:
-                        cmds.connectAttr(str(dnMap2) + ".outColor", str(MatName) + "_bumpLayer" + ".layer2_color")
-                        cmds.connectAttr(str(dnMask) + ".outColorG", str(MatName) + "_bumpLayer" + ".layer2_alpha")
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer2_enable", 1)
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer2_blend_mode", 1)
-                    except:
-                        print("Detail Map 2 skipped")
-                if dnMap3 != "$identitynormalmap" and dnMap3 != "$normal":
-                    try:
-                        cmds.connectAttr(str(dnMap3) + ".outColor", str(MatName) + "_bumpLayer" + ".layer3_color")
-                        cmds.connectAttr(str(dnMask) + ".outColorB", str(MatName) + "_bumpLayer" + ".layer3_alpha")
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer3_enable", 1)
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer3_blend_mode", 1)
-                    except:
-                        print("Detail Map 3 skipped")
-                if dnMap4 != "$identitynormalmap" and dnMap4 != "$normal":
-                    try:
-                        cmds.connectAttr(str(dnMap4) + ".outColor", str(MatName) + "_bumpLayer" + ".layer4_color")
-                        cmds.connectAttr(str(dnMask) + ".outColorA", str(MatName) + "_bumpLayer" + ".layer4_alpha")
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer4_enable", 1)
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer4_blend_mode", 1)
-                    except:
-                        print("Detail Map 3 skipped")
-                cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
+                if REngine != 'USD':
+                    cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + str(BumpMixL1[REngine]))
+                    cmds.connectAttr(str(dnMask) + ".outColorG", str(MatName) + "_bumpLayer" + str(BumpMixL2[REngine]))
+                    cmds.connectAttr(str(dnMask) + ".outColorB", str(MatName) + "_bumpLayer" + str(BumpMixL3[REngine]))        
+            # if not cmds.objExists(dnMap2) and dnMap2 != "$identitynormalmap" and dnMap2 != "$normal":
+            #     CreateImageNode(str(dnMap2),"Place2"+str(dnMap2))
+            #     cmds.setAttr(str(dnMap2) + ".fileTextureName", cMapFP + dnMap2 + FileType, type="string")
+            #     cmds.setAttr(str(dnMap2) + ".colorSpace", "Raw", type="string")
+            # if not cmds.objExists(dnMap3) and dnMap3 != "$identitynormalmap" and dnMap3 != "$normal":
+            #     CreateImageNode(str(dnMap3),"Place2"+str(dnMap3))
+            #     cmds.setAttr(str(dnMap3) + ".fileTextureName", cMapFP + dnMap3 + FileType, type="string")
+            #     cmds.setAttr(str(dnMap3) + ".colorSpace", "Raw", type="string")
+            # if not cmds.objExists(dnMap4) and dnMap4 != "$identitynormalmap" and dnMap4 != "$normal":
+            #     CreateImageNode(str(dnMap4),"Place2"+str(dnMap4))
+            #     cmds.setAttr(str(dnMap4) + ".fileTextureName", cMapFP + dnMap4 + FileType, type="string")
+            #     cmds.setAttr(str(dnMap4) + ".colorSpace", "Raw", type="string")
+            
+            # cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_enable", 0)
+            # if dnMap1 != "$identitynormalmap" and dnMap1 != "$normal":
+            #     # try:
+            #         cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL1[REngine]))
+            #         cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + str(BumpMixL1[REngine]))
+            #         cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE1[REngine]), 1)
+            #         if REngine == 'Redshift':
+            #             cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_blend_mode", 1)
+                # except:
+                #     print("Detail Map 1 skipped")
+            # if dnMap2 != "$identitynormalmap" and dnMap2 != "$normal":
+            #     try:
+            #         cmds.connectAttr(str(dnMap2) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL2[REngine]))
+                    
+            #         cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE2[REngine]), 1)
+            #         if REngine == 'Redshift':
+            #             cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer2_blend_mode", 1)
+            #     except:
+            #         print("Detail Map 2 skipped")
+            # if dnMap3 != "$identitynormalmap" and dnMap3 != "$normal":
+            #     try:
+            #         cmds.connectAttr(str(dnMap3) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL3[REngine]))
 
-                if os.path.exists(cMapFP + eMap + FileType) and cMap != "$black_color":
-                    if not cmds.objExists(eMap):
-                        CreateImageNode(str(eMap),"Place2"+str(eMap))
-                    cmds.connectAttr(str(eMap) + ".outColor", MatName + ".emission_color")
-                    cmds.setAttr(str(eMap) + ".fileTextureName", cMapFP + eMap + FileType, type="string")
-                    cmds.setAttr(str(MatName) + ".emission_weight", 1)
-        except:
-            print("Image not found")
+            #         cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE3[REngine]), 1)
+            #         if REngine == 'Redshift':
+            #             cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer3_blend_mode", 1)
+            #     except:
+            #         print("Detail Map 3 skipped")
+
+            if os.path.exists(cMapFP + eMap + FileType) and cMap != "$black_color":
+                if not cmds.objExists(eMap):
+                    CreateImageNode(str(eMap),"Place2"+str(eMap))
+                cmds.connectAttr(str(eMap) + ".outColor", MatName + MatEmmision[REngine])
+                cmds.setAttr(str(eMap) + ".fileTextureName", cMapFP + eMap + FileType, type="string")
+                cmds.setAttr(str(MatName) + ".emission_weight", 1)
+            # except:
+            #     print("Image not found")
 
 OSLText = '''
         color Transformer(float R, float G){
@@ -414,6 +628,7 @@ OSLText = '''
     }'''
 
 def SetupMaterial_S4_IW9():
+    global NoNormals
     csMap = ""
     nMap = ""
     gMap = ""
@@ -433,6 +648,7 @@ def SetupMaterial_S4_IW9():
     dnMap3UF = ""
     sssMapUF = ""
     isSkinMaterial = False
+
 
     colorSemantic = {
     'Vangaurd': 'unk_semantic_0x0',
@@ -469,7 +685,7 @@ def SetupMaterial_S4_IW9():
         'Modern Warfare II': ''}
     
     cFile = MatDirectory + "/" + MatName + "_images.txt"
-    print("Material: " + MatName)
+    # print("Material: " + MatName)
     textOpen = open(cFile, "r")
     fList = textOpen.readlines()
     sList = []
@@ -479,10 +695,10 @@ def SetupMaterial_S4_IW9():
         semantic_replace = semantic_temp[1]
         semantic_temp[1] = semantic_replace[:-1]
         sList.append(semantic_temp)
-        print(semantic_temp)
+        # print(semantic_temp)
         i = i + 1
     sList[0].remove("semantic")
-    print(sList)
+    # print(sList)
     i=0
     for elements in sList:
         if sList[i][0] == colorSemantic[Game]:
@@ -491,6 +707,7 @@ def SetupMaterial_S4_IW9():
         elif sList[i][0] == ngoSemantic[Game]:
             ngoMap = sList[i][1].replace('~','').partition("&")[0]
             ngoMapUF = sList[i][1]
+            nMap = sList[i][1].replace('~','').partition("&")[0] + '_n'
         elif sList[i][0] == emmisiveSemantic[Game]:
             eMap = sList[i][1].partition("~")[0]
             eMapUF = sList[i][1]
@@ -513,7 +730,7 @@ def SetupMaterial_S4_IW9():
             dnMap3 = sList[i][1].partition("&")[0]
             dnMap3UF = sList[i][1]
         i = i + 1
-    print("Colour and Specular Map: " + csMap + "\n" + "Normal, Gloss and Occlusion Map: " + ngoMapUF + "\n" + "Normal Mask: " + dnMask)
+    # print("Colour and Specular Map: " + csMap + "\n" + "Normal, Gloss and Occlusion Map: " + ngoMapUF + "\n" + "Normal Mask: " + dnMask)
     textOpen.close()
 
     if cmds.checkBox("image_folder", q=True, v=True) == True:
@@ -535,48 +752,52 @@ def SetupMaterial_S4_IW9():
     if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black" and isSkinMaterial == False:
         if not cmds.objExists(csMap):
             CreateImageNode(str(csMap),"Place2"+str(csMap))
-            colorNode = mel.eval('shadingNode -asUtility reverse;')
-            cmds.rename(colorNode, str(csMap) + "_alpha_reverse")
-            # Connect colorMapAlpha to reverse node
-            cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_alpha_reverse" + ".inputX")
-            cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_alpha_reverse" + ".inputY")
-            cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_alpha_reverse" + ".inputZ")
-            # Creates color layer
-        if not cmds.objExists(csMap + "_colorLayer"):
-            colorLayer = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-            cmds.rename(colorLayer, str(csMap) + "_colorLayer")
-            # Connects reverse node and color to color layer
-            cmds.connectAttr(str(csMap) + ".outColor", str(csMap) + "_colorLayer" + ".layer1_color")
-            cmds.connectAttr(str(csMap) + "_alpha_reverse" + ".outputX", str(csMap) + "_colorLayer" + ".layer1_alpha")
-        # Connects color layer to material
-        cmds.connectAttr(str(csMap) + "_colorLayer" + ".outColor", MatName + ".diffuse_color")
-        print("Color Layer connected")
-        cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
+            # colorNode = mel.eval('shadingNode -asUtility reverse;')
+            # cmds.rename(colorNode, str(csMap) + "_alpha_reverse")
+            cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
+        if REngine == 'Redhsift':
+            cmds.setAttr(MatName + '.refl_fresnel_mode', 2)
+            cmds.setAttr(MatName + MatSheen[REngine], 0.4)
+        if REngine == 'Arnold':
+            cmds.setAttr(MatName + MatSheen[REngine], 0.1)
+        cmds.connectAttr(str(csMap) + ".outColor", MatName + str(MatDiffuse[REngine]))
+        if has_transparency(Image.open(cMapFP + csMapUF + FileType)):
+            cmds.connectAttr(str(csMap) + ".outAlpha", MatName + MatMetallic[REngine])
+        cmds.setAttr(MatName + MatSpec[REngine], 0)
+
+        
+        # print("Color Layer connected")
     elif csMap == "$black":
-        cmds.setAttr(str(MatName) + ".diffuse_color", 0, 0, 0)
+        cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 0, 0, 0)
 
     ## Specular Map
-    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black" and isSkinMaterial == False:
-        print("Specular Map exists")
-        if not cmds.objExists(csMap):
-            CreateImageNode(str(csMap),"Place2"+str(csMap))
-            print("Specular Map Node created")
-        if not cmds.objExists(str(csMap) + '_specularLayer'):
-            # Creates color layer
-            print("Specular Layer Created")
-            colorLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-            cmds.rename(colorLayerNode, str(csMap) + "_specularLayer")
-            cmds.setAttr(str(csMap) + "_specularLayer" + ".base_color", 0.22, 0.22, 0.22)
-            # Connects Color Map to Color Layer
-            cmds.connectAttr(str(csMap) + ".outColor", str(csMap) + "_specularLayer" + ".layer1_color")
-            cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_specularLayer" + ".layer1_alpha")
-        # Connects color layer to material
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1) # 1 - Colour Edge & Tint
-        cmds.connectAttr(str(csMap) + "_specularLayer" + ".outColor", MatName + ".refl_reflectivity")
-        cmds.setAttr(str(MatName) + ".refl_edge_tintR", 1, clamp=True)
-        cmds.setAttr(str(MatName) + ".refl_edge_tintG", 1, clamp=True)
-        cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
-        cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
+    # if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black" and isSkinMaterial == False:
+    #     print("Specular Map exists")
+    #     if not cmds.objExists(csMap):
+    #         CreateImageNode(str(csMap),"Place2"+str(csMap))
+    #         # print("Specular Map Node created")
+    #         cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
+    #     if not cmds.objExists(str(csMap) + '_specularLayer'):
+    #         # Creates color layer
+    #         print("Specular Layer Created")
+    #         if REngine == 'Redshift':
+    #             specularLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
+    #         if REngine == 'Arnold':
+    #             specularLayerNode = mel.eval('shadingNode -asTexture aiLayerRgba;')
+    #             cmds.setAttr(specularLayerNode + BumpE1[REngine], 1)
+    #         cmds.rename(specularLayerNode, str(csMap) + "_specularLayer")
+    #         cmds.setAttr(str(csMap) + "_specularLayer" + str(BumpL1[REngine]), 0.22, 0.22, 0.22)
+    #         # Connects Color Map to Color Layer
+    #         cmds.connectAttr(str(csMap) + ".outColor", str(csMap) + "_specularLayer" + str(BumpL2[REngine]))
+    #         cmds.connectAttr(str(csMap) + ".outAlpha", str(csMap) + "_specularLayer" + str(BumpMixL1[REngine]))
+    #     # Connects color layer to material
+    #     cmds.connectAttr(str(csMap) + "_specularLayer" + ".outColor", MatName + str(MatSpecColor[REngine]))
+    #     if REngine == 'Redshift':
+    #         cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1) # 1 - Colour Edge & Tint
+    #         cmds.setAttr(str(MatName) + ".refl_edge_tintR", 1, clamp=True)
+    #         cmds.setAttr(str(MatName) + ".refl_edge_tintG", 1, clamp=True)
+    #         cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
+        
 
     # if isSkinMaterial == True and os.path.exists(cMapFP + csMapUF + FileType):
     #     if not cmds.objExists(csMap):
@@ -606,41 +827,54 @@ def SetupMaterial_S4_IW9():
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].position", 0)
             cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].color", 0, 0, 0)
-            cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + "_ramp" + ".vCoord")
-        if isSkinMaterial ==True:
+            if REngine == 'Redshift':
+                cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + "_ramp" + ".vCoord")
+        if REngine =='Arnold' and bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                if not cmds.objExists(str(ngoMap) + '_reverse'):
+                    reverseNode = mel.eval('shadingNode -asTexture reverse;')
+                    cmds.rename(reverseNode, str(ngoMap) + '_reverse')
+                    cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + '_reverse.inputX')
+                    cmds.connectAttr(str(ngoMap) + '_reverse.outputX', str(ngoMap) + "_ramp" + ".vCoord")
+        
+        if isSkinMaterial == True:
             cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + ".refl_gloss0")
         else:
-            cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + ".refl_roughness")
+            cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
+            cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatSheenRough[REngine]))
         
         ConvertGlossToRough()
 
     ## Normal Map
-    if os.path.exists(cMapFP + ngoMapUF + FileType) and ngoMap != "$normal":
-        if not cmds.objExists(ngoMap):
-            CreateImageNode(str(ngoMap),"Place2"+str(ngoMap))
-            cmds.setAttr(str(ngoMap) + ".fileTextureName", cMapFP + ngoMapUF + FileType, type="string")
-            cmds.setAttr(str(ngoMap) + ".colorSpace", "Raw", type="string")
-        if not cmds.objExists(str(ngoMap) + "_OSLConverter"):
-            OSLShader = mel.eval('shadingNode -asShader RedshiftOSLShader;')
-            cmds.rename(OSLShader, str(ngoMap) + "_OSLConverter")
-            removeFromShaderList(str(ngoMap) + "_OSLConverter")
-            cmds.setAttr(str(ngoMap) + "_OSLConverter" + ".sourceText", OSLText, type="string")
-            cmds.connectAttr(str(ngoMap) + ".outColorG", str(ngoMap) + "_OSLConverter" + ".inColorR")
-            cmds.connectAttr(str(ngoMap) + ".outAlpha", str(ngoMap) + "_OSLConverter" + ".inColorG")
-            # ngoNode = mel.eval('shadingNode -asTexture RedshiftColorCorrection;')
-            # cmds.rename(ngoNode, str(ngoMap) + "_OSLConverterCC")
-            # cmds.connectAttr(str(ngoMap) + "_OSLConverter" + ".outColor", str(ngoMap) + "_OSLConverterCC" + ".input")
-            # cmds.setAttr(str(ngoMap) + "_OSLConverterCC" + ".contrast", 0.75)
+    if os.path.exists(cMapFP + ngoMapUF + '_n' + FileType) and ngoMap != "$normal":
         if not cmds.objExists(str(ngoMap) + '_bump'):
-            bumpNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
+            if REngine == 'Redshift':
+                bumpNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
+                cmds.setAttr(bumpNode + ".inputType", 1)
+                cmds.setAttr(bumpNode + ".scale", 1)
+            if REngine == 'Arnold':
+                bumpNode = mel.eval('shadingNode -asTexture aiNormalMap;')
             cmds.rename(bumpNode, str(MatName) + "_bump")
-            cmds.setAttr(str(MatName) + "_bump.inputType", 1)
-            # cmds.setAttr(str(MatName) + "_bump.flipY", 1)
-            cmds.setAttr(str(MatName) + "_bump.scale", 1)
+        if REngine == 'Redshift':
+            if not cmds.objExists(ngoMap):
+                CreateImageNode(str(ngoMap),"Place2"+str(ngoMap))
+                cmds.setAttr(str(ngoMap) + ".fileTextureName", cMapFP + ngoMapUF + FileType, type="string")
+                cmds.setAttr(str(ngoMap) + ".colorSpace", "Raw", type="string")
+            if not cmds.objExists(str(ngoMap) + "_OSLConverter"):
+                OSLShader = mel.eval('shadingNode -asShader RedshiftOSLShader;')
+                cmds.rename(OSLShader, str(ngoMap) + "_OSLConverter")
+                removeFromShaderList(str(ngoMap) + "_OSLConverter")
+                cmds.setAttr(str(ngoMap) + "_OSLConverter" + str(OSLNodeText[REngine]), OSLText, type="string")
+                cmds.connectAttr(str(ngoMap) + ".outColorG", str(ngoMap) + "_OSLConverter" + ".inColorR")
+                cmds.connectAttr(str(ngoMap) + ".outAlpha", str(ngoMap) + "_OSLConverter" + ".inColorG")
+            cmds.connectAttr(str(ngoMap) + "_OSLConverter" + ".outColor", str(MatName) + "_bump" + ".input")
+        if REngine == 'Arnold':
+            if not cmds.objExists(nMap):
+                CreateImageNode(str(nMap),"Place2"+str(nMap))
+                cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
+                cmds.setAttr(str(nMap) + ".colorSpace", "Raw", type="string")
+            cmds.connectAttr(str(nMap) + '.outColor', str(MatName) + "_bump" + '.input')
 
-        cmds.connectAttr(str(ngoMap) + "_OSLConverter" + ".outColor", str(MatName) + "_bump" + ".input")
-        # cmds.connectAttr(str(ngoMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bump" + ".input")
-        cmds.connectAttr(str(MatName) + "_bump" + ".out", MatName + ".bump_input")
+        cmds.connectAttr(str(MatName) + "_bump" + str(MatBumpOut[REngine]), MatName + str(MatBump[REngine]))
         
         if os.path.exists(cMapFP + dnMap1UF + FileType) and dnMap1 != "$black":
                     if not cmds.objExists(dnMap1):
@@ -660,8 +894,8 @@ def SetupMaterial_S4_IW9():
                     cmds.disconnectAttr(str(ngoMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bump" + ".input")
                     detailLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
                     cmds.rename(detailLayerNode, str(MatName) + "_bumpLayer")
-                    cmds.connectAttr(str(ngoMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
-                    cmds.connectAttr(str(dnMap1) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".layer1_color")
+                    cmds.connectAttr(str(ngoMap) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL1[REngine]))
+                    cmds.connectAttr(str(dnMap1) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL2[REngine]))
                     cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
                     cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_blend_mode", 1)
         if os.path.exists(cMapFP + dnMap2UF + FileType) and dnMap2 != "$black":
@@ -679,8 +913,8 @@ def SetupMaterial_S4_IW9():
                             print("Detail Map 2 created and connected to colour correct node")
                             cmds.setAttr(str(dnMap2) + "_OSLConverterCC" + ".contrast", 0.75)
                             cmds.setAttr(str(dnMap2) + ".colorSpace", "Raw", type="string")
-                        cmds.connectAttr(str(dnMap2) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".layer2_color")
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer2_enable", 1)
+                        cmds.connectAttr(str(dnMap2) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL3[REngine]))
+                        cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE2[REngine]), 1)
                         cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer2_blend_mode", 1)
         if os.path.exists(cMapFP + dnMap3UF + FileType) and dnMap3 != "$black":
                         if not cmds.objExists(dnMap3):
@@ -697,24 +931,24 @@ def SetupMaterial_S4_IW9():
                             print("Detail Map 2 created and connected to colour correct node")
                             cmds.setAttr(str(dnMap3) + "_OSLConverterCC" + ".contrast", 0.75)
                             cmds.setAttr(str(dnMap3) + ".colorSpace", "Raw", type="string")
-                        cmds.connectAttr(str(dnMap3) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + ".layer3_color")
-                        cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer3_enable", 1)
+                        cmds.connectAttr(str(dnMap3) + "_OSLConverterCC" + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL4[REngine]))
+                        cmds.setAttr(str(MatName) + "_bumpLayer" + str(BumpE3[REngine]), 1)
                         cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer3_blend_mode", 1)
         if os.path.exists(cMapFP + dnMaskUF + FileType) and dnMask != "$black":
             CreateImageNode(str(dnMask),"Place2"+str(dnMask))
             cmds.setAttr(str(dnMask) + ".fileTextureName", cMapFP + dnMaskUF + FileType, type="string")
             if dnMap1 != "$black":
-                cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer1_alpha")
+                cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + str(BumpMixL1[REngine]))
             if dnMap2 != "$black":
-                cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer2_alpha")
+                cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + str(BumpMixL2[REngine]))
             if dnMap3 != "$black":
-                cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer3_alpha")
+                cmds.connectAttr(str(dnMask) + ".outColorR", str(MatName) + "_bumpLayer" + str(BumpMixL3[REngine]))
 
         ## Emmisive Map
         if os.path.exists(cMapFP + eMapUF + FileType) and eMap != "$black":
                 if not cmds.objExists(eMap):
                     CreateImageNode(str(eMap),"Place2"+str(eMap))
-                cmds.connectAttr(str(eMap) + ".outColor", MatName + ".emission_color")
+                cmds.connectAttr(str(eMap) + ".outColor", MatName + str(MatEmmision[REngine]))
                 cmds.setAttr(str(eMap) + ".fileTextureName", cMapFP + eMapUF + FileType, type="string")
                 cmds.setAttr(str(MatName) + ".emission_weight", 1)
 
@@ -722,14 +956,12 @@ def SetupMaterial_S4_IW9():
         if os.path.exists(cMapFP + oMapUF + FileType) and oMap != "$black" and oMap != 'ximage_3c29eeff15212c37' and isSkinMaterial == False:
                 if not cmds.objExists(oMap):
                     CreateImageNode(str(oMap),"Place2"+str(oMap))
-                cmds.connectAttr(str(oMap) + ".outColor", MatName + ".opacity_color")
+                cmds.connectAttr(str(oMap) + ".outColor", str(MatName) + str(MatOpacity[REngine]))
                 cmds.setAttr(str(oMap) + ".fileTextureName", cMapFP + oMapUF + FileType, type="string")
+    else:
+        NoNormals.append(MatName)
 
 def SetupMaterialH1():
-    global MatName
-    global FileType
-    global OSLText
-
     FileType = "." + cmds.optionMenu('image_type', q=True, v=True).lower()
     cMap = ""
     aoMap = ""
@@ -739,6 +971,7 @@ def SetupMaterialH1():
     eMap = ""
     dnMap = ""
     cFile = MatDirectory + "/" + MatName + "_images.txt"
+    
     # print("Material: " + MatName)
     textOpen = open(cFile, "r")
     fList = textOpen.readlines()
@@ -749,7 +982,7 @@ def SetupMaterialH1():
         semantic_replace = semantic_temp[1]
         semantic_temp[1] = semantic_replace[:-1]
         sList.append(semantic_temp)
-        print(semantic_temp)
+        # print(semantic_temp)
         i = i + 1
     sList[0].remove("semantic")
     # print(sList)
@@ -782,121 +1015,185 @@ def SetupMaterialH1():
         try:
             if not cmds.objExists(cMap):
                 CreateFileNode(str(cMap))
-                cmds.connectAttr(str(cMap) + ".outColor", MatName + ".diffuse_color", force=True)
-            if cmds.checkBox("enable_alpha", q=True, v=True) == True:
-                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + ".opacity_colorR", force=True)
-                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + ".opacity_colorG", force=True)
-                cmds.connectAttr(str(cMap) + ".outAlpha", MatName + ".opacity_colorB", force=True)
-            cmds.setAttr(str(cMap) + ".fileTextureName", cMapFP + cMap + FileType, type="string")
+                cmds.setAttr(str(cMap) + ".fileTextureName", cMapFP + cMap + FileType, type="string")
+            cmds.connectAttr(str(cMap) + ".outColor", MatName + str(MatDiffuse[REngine]), force=True)
+            if has_transparency(Image.open(cMapFP + cMap + FileType)):
+
+                if cmds.checkBox("enable_alpha", q=True, v=True) == True:
+                    if REngine != 'USD':
+                        cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine] + 'R'), force=True)
+                        cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine] + 'G'), force=True)
+                        cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine] + 'B'), force=True)
+                    else:
+                        cmds.connectAttr(str(cMap) + ".outAlpha", MatName + str(MatOpacity[REngine]))
+            
         except:
-            print("Specular Map failed")
+            print("Color Map failed")
     elif cMap == "$white_diffuse":
-        cmds.setAttr(str(MatName) + ".diffuse_color", 1, 1, 1)
+        cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 1, 1, 1)
     elif cMap == "$black_diffuse" or cMap == "$black" or cMap == "$black_color":
-        cmds.setAttr(str(MatName) + ".diffuse_color", 0, 0, 0)
+        cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 0, 0, 0)
     
     # Specular Map
     if os.path.exists(cMapFP + sMap + FileType) and not sMap.__contains__("$white"):
         try:
             if not cmds.objExists(Filter(sMap)):
                 CreateFileNode(str(Filter(sMap)))
-            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1) # 1 - Colour Edge & Tint
-            cmds.connectAttr(str(Filter(sMap)) + ".outColor", MatName + ".refl_reflectivity")
-            cmds.setAttr(str(Filter(sMap)) + ".fileTextureName", cMapFP + sMap + FileType, type="string")
-            cmds.setAttr(str(MatName) + ".refl_edge_tintR", 1, clamp=True)
-            cmds.setAttr(str(MatName) + ".refl_edge_tintG", 1, clamp=True)
-            cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
+                cmds.setAttr(str(Filter(sMap)) + ".fileTextureName", cMapFP + sMap + FileType, type="string")
+            
+            cmds.connectAttr(str(Filter(sMap)) + ".outColor", MatName + str(MatSpecColor[REngine]))
+
+            if REngine == 'Redshift':
+                cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1) # 1 - Colour Edge & Tint
+                cmds.setAttr(str(MatName) + ".refl_edge_tintR", 1, clamp=True)
+                cmds.setAttr(str(MatName) + ".refl_edge_tintG", 1, clamp=True)
+                cmds.setAttr(str(MatName) + ".refl_edge_tintB", 1, clamp=True)
         except:
             print("Specular Map failed")
     elif sMap == "$specular":
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
-        cmds.setAttr(str(MatName) + ".refl_reflectivity", 0.23, 0.23, 0.23)
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
+        cmds.setAttr(str(MatName) + str(MatSpecColor[REngine]), 0.23, 0.23, 0.23)
     elif sMap.find("&white") == -1:
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
-        cmds.setAttr(str(MatName) + ".refl_reflectivity", 1, 1, 1)
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 1)
+        cmds.setAttr(str(MatName) + str(MatSpecColor[REngine]), 1, 1, 1)
     elif not os.path.exists(cMapFP + sMap + FileType):
-        cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 3) # 3 - IOR
+        if REngine == 'Redshift':
+            cmds.setAttr(str(MatName) + ".refl_fresnel_mode", 3) # 3 - IOR
 
     # Occlusion Map
     if os.path.exists(cMapFP + aoMap + FileType) and aoMap != "$white_ao" and aoMap != "$occlusion_black" and aoMap != "$occlusion_50" and aoMap != "$occlusion":
-        try:
-            CreateFileNode(str(Filter(aoMap)))
-            cmds.connectAttr(str(Filter(aoMap)) + ".outColor", MatName + ".overall_color", force=True)
-            cmds.setAttr(str(Filter(aoMap)) + ".fileTextureName", cMapFP + aoMap + FileType, type="string")
-        except:
-            print("Occlusion Map failed")
+        # try:
+            if not cmds.objExists(Filter(aoMap)):
+                CreateFileNode(str(Filter(aoMap)))
+                cmds.setAttr(str(Filter(aoMap)) + ".fileTextureName", cMapFP + aoMap + FileType, type="string")
+            if REngine != 'USD':
+                cmds.connectAttr(str(Filter(aoMap)) + ".outColor", MatName + ".overall_color", force=True)
+            else:
+                cmds.connectAttr(str(Filter(aoMap)) + ".outColorR", MatName + ".occlusion", force=True)
+        # except:
+        #     print("Occlusion Map failed")
     elif aoMap == "$black" or aoMap == "$occlusion_black":
         cmds.setAttr(str(MatName) + ".overall_color", 0, 0, 0)
 
     # Gloss Map
     if os.path.exists(cMapFP + gMap + FileType) and gMap != "$gloss" and gMap != "$white_gloss" and gMap != "$black" and gMap != "$black_gloss":
-            try:
+            # try:
                 if not cmds.objExists(Filter(gMap)):
                     CreateFileNode(str(Filter(gMap)))
                     cmds.setAttr(str(Filter(gMap)) + ".fileTextureName", cMapFP + gMap + FileType, type="string")
                     cmds.setAttr(str(Filter(gMap)) + ".colorSpace", "Raw", type="string")
-                if not cmds.objExists(Filter(gMap) + "_Ramp"):
-                    rampNode = mel.eval('shadingNode -asTexture ramp;')
-                    cmds.rename(rampNode, str(Filter(gMap)) + "_Ramp")
-                    rampNode = str(Filter(gMap)) + "_Ramp"
-                    cmds.setAttr(rampNode + ".colorEntryList[1].position", 1)
-                    cmds.setAttr(rampNode + ".colorEntryList[1].color", 1, 1, 1)
-                    cmds.setAttr(rampNode + ".colorEntryList[2].position", 0)
-                    cmds.setAttr(rampNode + ".colorEntryList[2].color", 0, 0, 0)
-                    cmds.connectAttr(str(Filter(gMap)) + ".outAlpha", rampNode + ".vCoord")
-                cmds.connectAttr(str(Filter(gMap)) + "_Ramp" + ".outColorR", MatName + ".refl_roughness")
-            except:
-                print("Gloss Map failed")
+
+                    if REngine =='Arnold' or REngine == 'USD' and bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                        reverseNode = mel.eval('shadingNode -asTexture reverse;')
+                        cmds.rename(reverseNode, str(Filter(gMap)) + '_reverse')
+                        cmds.connectAttr(str(Filter(gMap)) + ".outColorR", str(Filter(gMap)) + '_reverse.inputX')
+                    if REngine != 'USD':
+                        if not cmds.objExists(Filter(gMap) + "_Ramp"):
+                            rampNode = mel.eval('shadingNode -asTexture ramp;')
+                            cmds.rename(rampNode, str(Filter(gMap)) + "_Ramp")
+                            rampNode = str(Filter(gMap)) + "_Ramp"
+                            cmds.setAttr(rampNode + ".colorEntryList[1].position", 1)
+                            cmds.setAttr(rampNode + ".colorEntryList[1].color", 1, 1, 1)
+                            cmds.setAttr(rampNode + ".colorEntryList[2].position", 0)
+                            cmds.setAttr(rampNode + ".colorEntryList[2].color", 0, 0, 0)
+                
+                if not cmds.objExists(Filter(gMap) + '_reverse'):
+                    print("Reverse not desn't exist yet")
+                    if REngine =='Arnold' or REngine == 'USD' and bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                        reverseNode = mel.eval('shadingNode -asTexture reverse;')
+                        cmds.rename(reverseNode, str(Filter(gMap)) + '_reverse')
+                        cmds.connectAttr(str(Filter(gMap)) + ".outAlpha", str(Filter(gMap)) + '_reverse.inputX')
+
+                if REngine == 'Redshift':
+                    cmds.connectAttr(str(Filter(gMap)) + ".outAlpha", str(Filter(gMap)) + "_ramp" + ".vCoord")
+                
+                if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                    if REngine =='Arnold':
+                        cmds.connectAttr(str(Filter(gMap)) + '_reverse.outputX', str(Filter(gMap)) + "_ramp" + ".vCoord")
+                    if REngine == 'USD':
+                        cmds.connectAttr(str(Filter(gMap)) + '_reverse.outputX', MatName + MatRough[REngine])
+                else:
+                    if REngine =='Arnold':
+                            cmds.connectAttr(str(Filter(gMap)) + '.outAlpha', str(Filter(gMap)) + "_ramp" + ".vCoord")
+                    if REngine == 'USD':
+                        cmds.connectAttr(str(Filter(gMap)) + '.outAlpha', MatName + MatRough[REngine])
+                
+                    if REngine != 'USD':
+                        cmds.connectAttr(str(Filter(gMap)) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
+            # except:
+            #     print("Gloss Map failed")
+            
     elif gMap == "$gloss":
-        cmds.setAttr(str(MatName) + ".refl_roughness", 0.23)
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.23)
     elif gMap == "$white_gloss":
-        cmds.setAttr(str(MatName) + ".refl_roughness", 1)
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
     elif gMap == "$black" or gMap == "$black_gloss":
-        cmds.setAttr(str(MatName) + ".refl_roughness", 0)
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
 
     # Normal Map
     if os.path.exists(cMapFP + nMap + FileType) and nMap != "$identitynormalmap" and nMap != "$normal":
-        try:
+        # try:
             if not cmds.objExists(nMap):
                 CreateFileNode(str(nMap))
                 cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
-            normalNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
-            cmds.rename(normalNode, str(MatName) + "_bump")
-            cmds.setAttr(str(MatName) + "_bump.inputType", 1)
-            cmds.setAttr(str(MatName) + "_bump.flipY", 1)
-            cmds.setAttr(str(MatName) + "_bump.scale", 1)
-            cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-            cmds.connectAttr(str(MatName) + "_bump" + ".out", MatName + ".bump_input")
-            cmds.setAttr(str(nMap) + ".colorSpace", "Raw", type="string")
+                cmds.setAttr(str(nMap) + ".colorSpace", "Raw", type="string")
+            if REngine == 'Redshift':
+                normalNode = mel.eval('shadingNode -asTexture RedshiftBumpMap;')
+                cmds.setAttr(str(MatName) + "_bump.inputType", 1)
+                # cmds.setAttr(str(MatName) + '_bump' + str(MatBumpY[REngine]), 1)
+                cmds.setAttr(str(MatName) + "_bump.scale", 1)
+            if REngine == 'Arnold':
+                normalNode = mel.eval('shadingNode -asTexture aiNormalMap;')
+            if REngine != 'USD':
+                cmds.rename(normalNode, str(MatName) + "_bump")
+                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
+                cmds.connectAttr(str(MatName) + "_bump" + str(MatBumpOut[REngine]), MatName + str(MatBump[REngine]))
+            else:
+                cmds.connectAttr(str(nMap) + ".outColor", MatName + str(MatBump[REngine]))
+            
             if os.path.exists(cMapFP + dnMap + FileType) and dnMap != "$identitynormalmap" and dnMap != "$normal":
                 if not cmds.objExists(dnMap):
                     CreateFileNode(str(dnMap))
                     cmds.setAttr(str(dnMap) + ".fileTextureName", cMapFP + dnMap + FileType, type="string")
+                    cmds.setAttr(str(dnMap) + ".colorSpace", "Raw", type="string")
+                    
+                
+                if REngine == 'Redshift':
+                    normalLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
                     detailNode = mel.eval('shadingNode -asShader RedshiftOSLShader;')
                     cmds.setAttr(detailNode + ".sourceText", OSLText, type="string")
                     cmds.connectAttr(str(dnMap) + ".outColor", detailNode + ".inColor")
+                    cmds.setAttr(normalLayerNode + ".layer1_blend_mode", 1)
                     cmds.rename(detailNode, str(dnMap) + "_OSLConverter")
-                cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
-                normalLayerNode = mel.eval('shadingNode -asTexture RedshiftColorLayer;')
-                cmds.rename(normalLayerNode, str(MatName) + "_bumpLayer")
-                cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + ".base_color")
-                cmds.connectAttr(str(dnMap) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer1_colorR")
-                cmds.connectAttr(str(dnMap) + ".outColorG", str(MatName) + "_bumpLayer" + ".layer1_colorG")
-                cmds.connectAttr(str(dnMap) + "_OSLConverter" + ".outColorB", str(MatName) + "_bumpLayer" + ".layer1_colorB")
-                cmds.connectAttr(str(MatName) + "_bumpLayer" + ".outColor", str(MatName) + "_bump" + ".input")
-                cmds.setAttr(str(MatName) + "_bumpLayer" + ".layer1_blend_mode", 1)
-                cmds.setAttr(str(dnMap) + ".colorSpace", "Raw", type="string")
-        except:
-            print("Normal Map failed")
+                if REngine == 'Arnold':
+                    normalLayerNode = mel.eval('shadingNode -asTexture aiLayerRgba;')
+                
+                if REngine != 'USD':
+                    cmds.rename(normalLayerNode, str(MatName) + "_bumpLayer")
+                    cmds.disconnectAttr(str(nMap) + ".outColor", str(MatName) + "_bump" + ".input")
+                    cmds.connectAttr(str(nMap) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL1[REngine]))
+                    cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + "_bumpLayer" + str(BumpL2[REngine]))
+                    # cmds.connectAttr(str(dnMap) + ".outColorR", str(MatName) + "_bumpLayer" + ".layer1_colorR")
+                    # cmds.connectAttr(str(dnMap) + ".outColorG", str(MatName) + "_bumpLayer" + ".layer1_colorG")
+                    # cmds.connectAttr(str(dnMap) + ".outColorB", str(MatName) + "_bumpLayer" + ".layer1_colorB")
+                    cmds.connectAttr(str(MatName) + "_bumpLayer" + '.outColor', str(MatName) + "_bump" + ".input")
+                else:
+                    cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + str(BumpL2[REngine]))
+                
+        # except:
+        #     print("Normal Map failed")
 
     # Emissive Map
     if os.path.exists(cMapFP + eMap + FileType) and cMap != "$black_color":
         try:
             if not cmds.objExists(eMap):
                 CreateImageNode(str(eMap),"Place2"+str(eMap))
-            cmds.connectAttr(str(eMap) + ".outColor", MatName + ".emission_color")
-            cmds.setAttr(str(eMap) + ".fileTextureName", cMapFP + eMap + FileType, type="string")
-            cmds.setAttr(str(MatName) + ".emission_weight", 1)
+                cmds.setAttr(str(eMap) + ".fileTextureName", cMapFP + eMap + FileType, type="string")
+            cmds.connectAttr(str(eMap) + ".outColor", MatName + str(MatEmmision[REngine]))
+            if REngine != 'USD':
+                cmds.setAttr(str(MatName) + ".emission_weight", 1)
         except:
             print("Emmision Map failed")
         
@@ -1119,6 +1416,10 @@ def createWindow():
     cmds.text(label='<span style=\"color:#ccc;text-decoration:none;font-size:px;font-family:courier new;font-weight:bold;\">' + "Created by <a href=\"https://twitter.com/MrChuse\" style=\"color:purple\"> MrChuse</a>" + '</span>', hyperlink=True)
     addSpacer()
         
+    addDoubleRowLayout()
+    addText('Render Engine: ')
+    addOptionMenu("render","", ['Arnold', 'Redshift', 'USD'])
+    parentToLayout()
     addFrameColumnLayout('Material Attributes', False)
 
     addDoubleRowLayout()
@@ -1127,7 +1428,7 @@ def createWindow():
     parentToLayout()
     addDoubleRowLayout()
     addText('Assets Folder: ')
-    addFileBrowser("models_path", 2, 'Test placeholder text', 'Select assets folder')
+    addFileBrowser("models_path", 2, 'Select the path to your assets folder', 'Select assets folder')
     parentToLayout()
 
     addDoubleRowLayout()

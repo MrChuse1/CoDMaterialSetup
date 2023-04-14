@@ -9,3 +9,8 @@ Archive/materialSetupv2.py
 materialSetupVerUSD.py
 Archive/materialSetup.py
 /Archive*
+NGOTest.py
+SetupMaterialTreyarch.py
+MDTest.py
+.gitignore
+GPTDecode.py

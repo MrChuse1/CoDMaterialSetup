@@ -348,7 +348,7 @@ def CreateTex(Tex='', ImageFP='', InTex='', Channel=''):
         W = 1 - W
         Rough = Image.fromarray(W * 255)
         Roughness = Image.merge('RGB', (Rough.convert("L"), Rough.convert("L"), Rough.convert("L")))
-        print(FP + InTex + "." + (NGO.format).lower())
+        # print(FP + InTex + "." + (NGO.format).lower())
         Roughness.save(FP + InTex + "." + (NGO.format).lower())
 
     if Tex == 'Gloss' or Tex == 'Normal':
@@ -377,7 +377,7 @@ def CreateTex(Tex='', ImageFP='', InTex='', Channel=''):
                 print("Failed to create texture")
 
 def Filter(map):
-    return map.replace("~","").replace("-","_").replace("$","").replace("&","")
+    return map.replace("~","").replace("-","_").replace("$","").replace("&","__")
 
 def has_transparency(img):
     if img.info.get("transparency", None) is not None:
@@ -1167,7 +1167,7 @@ def SetupMaterialH1():
 
     # Occlusion Map
     if os.path.exists(cMapFP + aoMap + FileType) and aoMap != "$white_ao" and aoMap != "$occlusion_black" and aoMap != "$occlusion_50" and aoMap != "$occlusion":
-        # try:
+        try:
             if not cmds.objExists(Filter(aoMap)):
                 CreateImageNode(str(Filter(aoMap)),"Place2"+str(Filter(aoMap)))
                 cmds.setAttr(str(Filter(aoMap)) + ".fileTextureName", cMapFP + aoMap + FileType, type="string")
@@ -1175,16 +1175,21 @@ def SetupMaterialH1():
                 cmds.connectAttr(str(Filter(aoMap)) + ".outColor", MatName + ".overall_color", force=True)
             else:
                 cmds.connectAttr(str(Filter(aoMap)) + ".outColorR", MatName + ".occlusion", force=True)
-        # except:
-        #     print("Occlusion Map failed")
+        except:
+            print("Occlusion Map failed")
     elif aoMap == "$black" or aoMap == "$occlusion_black":
         cmds.setAttr(str(MatName) + ".overall_color", 0, 0, 0)
 
     # Gloss Map
-    if os.path.exists(cMapFP + gMap + FileType) and gMap != "$gloss" and gMap != "$white_gloss" and gMap != "$black" and gMap != "$black_gloss" and has_transparency(Image.open(cMapFP + gMap + FileType)):
-            # try:
+    if os.path.exists(cMapFP + gMap + FileType) and gMap != "$gloss" and gMap != "$white_gloss" and gMap != "$black" and gMap != "$black_gloss":
+        try:
+            if has_transparency(Image.open(cMapFP + gMap + FileType)):
+            
                 if REngine == 'USD':
-                    CreateTex('Gloss', (cMapFP + "\\" + gMap + FileType), Filter(gMap))
+                    try:
+                        CreateTex('Gloss', (cMapFP + "\\" + gMap + FileType), Filter(gMap))
+                    except:
+                        print("Error creating texture")
                 
                 if not cmds.objExists(Filter(gMap)):
                     CreateImageNode(str(Filter(gMap)),"Place2"+str(Filter(gMap)))
@@ -1225,14 +1230,20 @@ def SetupMaterialH1():
                                 cmds.connectAttr(str(Filter(gMap)) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
                 if REngine == 'USD':
                     cmds.connectAttr(str(Filter(gMap)) + ".outColorR", MatName + str(MatRough[REngine]))
-            # except:
-            #     print("Gloss Map failed")
+        except:
+            print("Gloss Map failed")
             
-    elif gMap == "$gloss" or not has_transparency(Image.open(cMapFP + gMap + FileType)):
+    elif gMap == "$gloss":
         if REngine != 'USD':
             cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.23)
         else:
             cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.77)
+    elif os.path.exists(cMapFP + gMap + FileType):
+        if not has_transparency(Image.open(cMapFP + gMap + FileType)):
+            if REngine != 'USD':
+                cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.23)
+            else:
+                cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.77)
     elif gMap == "$white_gloss":
         cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
     elif gMap == "$black" or gMap == "$black_gloss":
@@ -1240,7 +1251,7 @@ def SetupMaterialH1():
 
     # Normal Map
     if os.path.exists(cMapFP + nMap + FileType) and nMap != "$identitynormalmap" and nMap != "$normal":
-        # try:
+        try:
             if not cmds.objExists(nMap):
                 CreateImageNode(str(nMap),"Place2"+str(nMap))
                 cmds.setAttr(str(nMap) + ".fileTextureName", cMapFP + nMap + FileType, type="string")
@@ -1286,10 +1297,10 @@ def SetupMaterialH1():
                     # cmds.connectAttr(str(dnMap) + ".outColorB", str(MatName) + "_bumpLayer" + ".layer1_colorB")
                     cmds.connectAttr(str(MatName) + "_bumpLayer" + '.outColor', str(MatName) + "_bump" + ".input")
                 else:
-                    cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + str(BumpL2[REngine]))
+                    cmds.connectAttr(str(dnMap) + ".outColor", str(MatName) + str(MatBump[REngine]))
                 
-        # except:
-        #     print("Normal Map failed")
+        except:
+            print("Normal Map failed")
 
     # Emissive Map
     if os.path.exists(cMapFP + eMap + FileType) and cMap != "$black_color":

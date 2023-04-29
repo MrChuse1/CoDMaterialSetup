@@ -1,7 +1,7 @@
 
 ## Redshift Material Converter for Maya by MrChuse
 ## https://twitter.com/MrChuse
-## Version 1.0.7
+## Version 1.0.7.1
 
 
 import maya.cmds as cmds

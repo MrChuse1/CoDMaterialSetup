@@ -14,3 +14,5 @@ SetupMaterialTreyarch.py
 MDTest.py
 .gitignore
 GPTDecode.py
+TransCheck.py
+skinSetup.py

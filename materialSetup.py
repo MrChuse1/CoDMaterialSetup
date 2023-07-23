@@ -1,9 +1,9 @@
 
 ## Material Converter for Maya by MrChuse
 ## https://twitter.com/MrChuse
-## Version 1.0.8.0
+## Version 1.0.8.1
 
-### This version adds RenderMan support
+## This script is designed to convert materials from the Call of Duty games to Maya materials.
 
 import maya.cmds as cmds
 import maya.mel as mel
@@ -35,7 +35,6 @@ MatName = ""
 MatDirectory = ""
 MatList = []
 FileType = ""
-# MatProgress = 0
 Game = ''
 REngine = ''
 NoNormals = []
@@ -211,78 +210,93 @@ def Main():
     global Game
     global MatName
     global MatDirectory
-    # global MatProgress
     global FileType
     global REngine
-    modelsPath = cmds.textField("models_path", q=True, tx=True)
-    # modelsPath = "I:\\Scripts\\Test\\xmodels"
-    modelsFolders = os.listdir(str(modelsPath))
-    # print(modelsFolders)
-    FileType = "." + cmds.optionMenu('image_type', q=True, v=True).lower()
-    Game = cmds.optionMenu('game', q=True, v=True)
-    REngine = cmds.optionMenu('render', q=True, v=True)
-    if REngine == 'RenderMan' and Game == 'Modern Warfare II':
-        REngine = 'RenderManDis'
-    # print("FileType: " + FileType)
-    # cmds.progressWindow(title="Material Converter",status="Importing...",progress=0,ii=False)
-    models = []
-    for folder in modelsFolders:
-        if not folder.__contains__('.'):
-            models.append(folder)
-    print(models)
-    for model in models:
-        print("Model: ", model)
-        if not model.__contains__('.'):
-            modelFiles = os.listdir(str(modelsPath + '/' + model))
-            for file in modelFiles:
-                if file.endswith("_images.txt"):
-                    MatList.append(str(file[:-len("_images.txt")]))
-            cmds.progressWindow(edit=True,status="Model: " + folder)
-            # print('Materials: ', MatList)
+    
+    MatProgress = 0
+    while True:
+        modelsPath = cmds.textField("models_path", q=True, tx=True)
+        modelsFolders = os.listdir(str(modelsPath))
+        # print(modelsFolders)
+        FileType = "." + cmds.optionMenu('image_type', q=True, v=True).lower()
+        Game = cmds.optionMenu('game', q=True, v=True)
+        REngine = cmds.optionMenu('render', q=True, v=True)
+        if REngine == 'RenderMan' and Game == 'Modern Warfare II':
+            REngine = 'RenderManDis'
+        # print("FileType: " + FileType)
+        
+        models = []
+        for folder in modelsFolders:
+            if not folder.__contains__('.'):
+                models.append(folder)
+        print("Number of models: ", len(models))
 
-    for MatName in MatList:
-        MatDirectory = modelsPath + '/' + model
-        # print("Material: ", MatName)
-        if  cmds.objExists(MatName) and MatName != "lambert1":
+        cmds.progressWindow( title='Material Converter',progress=0,status='Importing...',isInterruptable=True )
+        
+        print(models)
+        for model in models:
             
-            if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != "RedshiftMaterial" and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
-                if REngine == 'Redshift':
-                    # materialNode = mel.eval('''rsCreateShadingNode "rendernode/redshift/shader/surface" "-asShader" "" RedshiftMaterial;''')
-                    materialNode = cmds.shadingNode('RedshiftMaterial', asShader=True)
-                    modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                if REngine == 'Arnold':
-                    materialNode = cmds.shadingNode('aiStandardSurface', asShader=True)
-                    modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                    # print(modelSG)
-                if REngine == 'USD':
-                    materialNode = cmds.shadingNode('usdPreviewSurface', asShader=True)
-                    modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                if REngine == 'RenderMan':
-                    materialNode = cmds.shadingNode('PxrSurface', asShader=True)
-                    modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
-                if REngine == 'RenderManDis':
-                    materialNode = cmds.shadingNode('PxrDisney', asShader=True)
-                    modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+            print("Model: ", model)
+            if not model.__contains__('.'):
+                modelFiles = os.listdir(str(modelsPath + '/' + model))
+                for file in modelFiles:
+                    if file.endswith("_images.txt"):
+                        MatList.append(str(file[:-len("_images.txt")]))
                 
-                cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
-                cmds.delete(MatName)
-                cmds.rename(materialNode, MatName)
-                print("Material Created: " + MatName)
-                mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
+                # print('Materials: ', MatList)
 
-                if Game == "Black Ops Cold War" or Game == "Black Ops 4":
-                    SetupMaterialTreyarch()
-                if Game == "Vangaurd" or Game == 'Modern Warfare II':
-                    SetupMaterial_S4_IW9()
-                if Game == "Modern Warfare Remastered":
-                    SetupMaterialH1()
-                # cmds.progressWindow(edit=True,progress=int(MatProgress/len(modelsFolders)))
-                # MatProgress = MatProgress + 1
-        else:
-            print(MatName, " does not exist.")
+            for MatName in MatList:
+                MatDirectory = modelsPath + '/' + model
+                # print("Material: ", MatName)
+                if  cmds.objExists(MatName) and MatName != "lambert1":
+                    if cmds.nodeType(MatName) != "aiStandardSurface" and cmds.nodeType(MatName) != "RedshiftMaterial" and cmds.nodeType(MatName) != "transform" and cmds.nodeType(MatName) != 'shadingEngine' and cmds.nodeType(MatName) != 'RedshiftSkin':
+                        if REngine == 'Redshift':
+                            # materialNode = mel.eval('''rsCreateShadingNode "rendernode/redshift/shader/surface" "-asShader" "" RedshiftMaterial;''')
+                            materialNode = cmds.shadingNode('RedshiftMaterial', asShader=True)
+                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        if REngine == 'Arnold':
+                            materialNode = cmds.shadingNode('aiStandardSurface', asShader=True)
+                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                            # print(modelSG)
+                        if REngine == 'USD':
+                            materialNode = cmds.shadingNode('usdPreviewSurface', asShader=True)
+                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        if REngine == 'RenderMan':
+                            materialNode = cmds.shadingNode('PxrSurface', asShader=True)
+                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        if REngine == 'RenderManDis':
+                            materialNode = cmds.shadingNode('PxrDisney', asShader=True)
+                            modelSG = cmds.listConnections(MatName + '.outColor', destination=True)[0]
+                        
+                        cmds.connectAttr(str(materialNode + '.outColor'), str(modelSG + '.surfaceShader'), force=True)
+                        cmds.delete(MatName)
+                        cmds.rename(materialNode, MatName)
+                        print("Material Created: " + MatName)
+                        mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
 
-    MatList.clear()
-    print("Thse Materials have no Normal Maps: \n", NoNormals)
+                        if Game == "Black Ops Cold War" or Game == "Black Ops 4":
+                            SetupMaterialTreyarch()
+                        if Game in ("Modern Warfare 2019", "Vangaurd", "Modern Warfare II", "Infinite Warfare"):
+                            SetupMaterial_S4_IW9()
+                        if Game == "Modern Warfare Remastered":
+                            SetupMaterialH1()
+                        
+                        
+                else:
+                    print(MatName, " does not exist.")
+                    
+            MatList.clear()
+            print("Thse Materials have no Normal Maps: \n", NoNormals)
+
+            MatProgress = MatProgress + 1
+            cmds.progressWindow( edit=True, status='Current Model: ' + model)
+            cmds.progressWindow( edit=True,progress=int((MatProgress/len(models))* 100))
+                        
+            if cmds.progressWindow(query=True, isCancelled=True) == True:
+                break
+        
+        cmds.progressWindow(endProgress=1)
+        break
         
 def ConvertGlossToRough():
     global MatName
@@ -613,11 +627,11 @@ def SetupMaterialTreyarch():
     elif gMap == "$white_gloss":
         cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
         if REngine == 'Arnold' or REngine == 'RenderMan':
-            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
+            cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.001)
         if REngine == 'USD':
             cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.001)
     elif gMap == "$black" or gMap == "$black_gloss":
-        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0)
+        cmds.setAttr(str(MatName) + str(MatRough[REngine]), 0.001)
         if REngine == 'Arnold' or REngine == 'USD' or REngine == 'RenderMan':
             cmds.setAttr(str(MatName) + str(MatRough[REngine]), 1)
     
@@ -748,9 +762,13 @@ OSLText = '''
         float NR = (R + G) * 0.5;
         float NG = (R - G) * 0.5;
         float NB = 1.0 - abs(NR) - abs(NG);
+		float LEN = sqrt((NR*NR) + (NG*NG) + (NB*NB));
 
+		float NX = NR / LEN;
+		float NY = NG / LEN;
+		float NZ = NB / LEN;
 
-        return color(NR * 0.5 + 0.5,NG * -1 * 0.5 + 0.5,NB * 0.5 + 0.5);
+        return color(NX * 0.5 + 0.5,NY * -1 * 0.5 + 0.5,NZ * 0.5 + 0.5);
     }
     shader specialthing(
 
@@ -785,36 +803,54 @@ def SetupMaterial_S4_IW9():
     isSkinMaterial = False
 
     colorSemantic = {
+    'Infinite Warfare': 'colorMap',
+    'Modern Warfare 2019': 'unk_semantic_0x0',
     'Vangaurd': 'unk_semantic_0x0',
     'Modern Warfare II': 'unk_semantic_0x0'}
 
     ngoSemantic = {
+        'Infinite Warfare': 'normalMap',
+        'Modern Warfare 2019': 'unk_semantic_0x9',
         'Vangaurd': 'unk_semantic_0x8',
         'Modern Warfare II': 'unk_semantic_0x4'}
 
     opacitySemantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'unk_semantic_0x1B',
         'Vangaurd': 'unk_semantic_0x18',
         'Modern Warfare II': 'unk_semantic_0xC'}
 
     emmisiveSemantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'TEMP',
         'Vangaurd': 'unk_semantic_0x10',
         'Modern Warfare II': 'INSERT_EMMISIVE_HERE'}
 
     subsurfaceSemantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'TEMP',
         'Vangaurd': 'unk_semantic_0x6F',
         'Modern Warfare II': 'unk_semantic_0x26'}
 
     detailMaskSemantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'TEMP',
         'Vangaurd': 'unk_semantic_0x9F',
         'Modern Warfare II': 'INSERT_MASK_HERE'}
 
     detail1Semantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'TEMP',
         'Vangaurd': 'unk_semantic_0x9',
         'Modern Warfare II': ''}
     detail2Semantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'TEMP',
         'Vangaurd': 'unk_semantic_0xA',
         'Modern Warfare II': ''}
     detail3Semantic = {
+        'Infinite Warfare': 'TEMP',
+        'Modern Warfare 2019': 'TEMP',
         'Vangaurd': 'unk_semantic_0xB',
         'Modern Warfare II': ''}
     
@@ -849,7 +885,7 @@ def SetupMaterial_S4_IW9():
             eMap = sList[i][1].partition("~")[0]
             eMapUF = sList[i][1]
         elif sList[i][0] == opacitySemantic[Game]:
-            oMap = sList[i][1].partition("~")[0][:-1] + 'o'
+            oMap = sList[i][1].partition("~")[0]
             oMapUF = sList[i][1]
         elif sList[i][0] == subsurfaceSemantic[Game]:
             sssMap = sList[i][1].partition("~")[0].partition("&")[0]
@@ -881,9 +917,8 @@ def SetupMaterial_S4_IW9():
             if not cmds.objExists(csMap):
                 CreateImageNode(str(csMap),"Place2"+str(csMap))
                 cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
-            if REngine == 'Redhsift':
-                cmds.setAttr(MatName + '.refl_fresnel_mode', 2)
-                cmds.setAttr(MatName + MatSheen[REngine], 0.4)
+            if REngine == 'Redshift':
+                cmds.setAttr(MatName + MatSheen[REngine], 0.1)
             if REngine == 'Arnold':
                 cmds.setAttr(MatName + MatSheen[REngine], 0.1)
             if REngine == 'RenderManDis':
@@ -891,6 +926,9 @@ def SetupMaterial_S4_IW9():
             cmds.connectAttr(str(csMap) + ".outColor", MatName + str(MatDiffuse[REngine]))
             if has_transparency(Image.open(cMapFP + csMapUF + FileType)):
                 cmds.connectAttr(str(csMap) + ".outAlpha", MatName + MatMetallic[REngine])
+                if REngine == 'Redshift':
+                    cmds.setAttr(MatName + '.refl_fresnel_mode', 2)
+                    cmds.setAttr(MatName + '.refl_brdf', 1)
             if REngine != 'USD' and REngine != 'RenderManDis':
                 cmds.setAttr(MatName + MatSpec[REngine], 0)
             # print("Color Layer connected")
@@ -907,36 +945,34 @@ def SetupMaterial_S4_IW9():
                     CreateImageNode(str(ngoMap),"Place2"+str(ngoMap))
                     cmds.setAttr(str(ngoMap) + ".fileTextureName", cMapFP + ngoMapUF + FileType, type="string")
                     cmds.setAttr(str(ngoMap) + ".colorSpace", "Raw", type="string")
-                    if REngine != 'USD':
-                        if not cmds.objExists(str(ngoMap) + '_ramp'):
-                            rampNode = mel.eval('shadingNode -asTexture ramp;')
-                            cmds.rename(rampNode, str(ngoMap) + "_ramp")
-                            cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].position", 1)
-                            cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
-                            cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].position", 0)
-                            cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].color", 0, 0, 0)
-                            if REngine == 'Redshift':
-                                cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + "_ramp" + ".vCoord")
-                    if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
-                        if REngine =='Arnold' or REngine == 'RenderManDis':
-                            if not cmds.objExists(str(ngoMap) + '_reverse'):
-                                reverseNode = mel.eval('shadingNode -asTexture reverse;')
-                                cmds.rename(reverseNode, str(ngoMap) + '_reverse')
-                                cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + '_reverse.inputX')
-                                cmds.connectAttr(str(ngoMap) + '_reverse.outputX', str(ngoMap) + "_ramp" + ".vCoord")
-                    
-                    if isSkinMaterial == True and REngine == 'Redshift':
-                        cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + ".refl_gloss0")
-                    else:
-                        cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
-                        if REngine != 'RenderManDis':
-                            cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatSheenRough[REngine]))
+            if REngine != 'USD':
+                if not cmds.objExists(str(ngoMap) + '_ramp'):
+                    rampNode = mel.eval('shadingNode -asTexture ramp;')
+                    cmds.rename(rampNode, str(ngoMap) + "_ramp")
+                    cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].position", 1)
+                    cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[1].color", 1, 1, 1)
+                    cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].position", 0)
+                    cmds.setAttr(str(ngoMap) + "_ramp.colorEntryList[2].color", 0, 0, 0)
+                    print('Ramp node created')
+                    # if REngine == 'Redshift':
+                    #     cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + "_ramp" + ".vCoord")
+                if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                    # if REngine =='Arnold' or REngine == 'RenderManDis' :
+                        if not cmds.objExists(str(ngoMap) + '_reverse'):
+                            reverseNode = mel.eval('shadingNode -asTexture reverse;')
+                            cmds.rename(reverseNode, str(ngoMap) + '_reverse')
+                            cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + '_reverse.inputX')
+                            cmds.connectAttr(str(ngoMap) + '_reverse.outputX', str(ngoMap) + "_ramp" + ".vCoord")
+                            print('Reverse Node created: ', reverseNode)
+                        # cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
+                        # 
+                if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
+                    cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
+                    if REngine != 'RenderManDis':
+                        cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatSheenRough[REngine]))
                 else:
-                    if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
-                        cmds.connectAttr(str(ngoMap) + '_reverse.outputX', MatName + MatRough[REngine])
-                    else:
-                        cmds.connectAttr(str(ngoMap) + ".outColorR", MatName + MatRough[REngine])
-                ConvertGlossToRough()
+                    cmds.connectAttr(str(ngoMap) + ".outColorR", MatName + MatRough[REngine])
+                # ConvertGlossToRough()
             else:
                 if not cmds.objExists(gMap):
                     CreateTex('Gloss', (cMapFP + "\\" + ngoMapUF + FileType), gMap)
@@ -1065,15 +1101,19 @@ def SetupMaterial_S4_IW9():
                 print("Emmissive map failed")
 
         # ## Opacity Map
+        print(oMap)
         if os.path.exists(cMapFP + oMapUF + FileType) and oMap != "$black" and oMap != 'ximage_3c29eeff15212c37' and isSkinMaterial == False:
-            if REngine == 'Redshift' or REngine == 'USD':
-                if not cmds.objExists(oMap):
-                    CreateImageNode(str(oMap),"Place2"+str(oMap))
-                    cmds.setAttr(str(oMap) + ".fileTextureName", cMapFP + oMapUF + FileType, type="string")
-                if REngine != 'USD':
-                    cmds.connectAttr(str(oMap) + ".outColor", str(MatName) + str(MatOpacity[REngine]))
-                else:
-                    cmds.connectAttr(str(oMap) + ".outColorR", str(MatName) + str(MatOpacity[REngine]))
+            try:
+                if REngine == 'Redshift' or REngine == 'USD':
+                    if not cmds.objExists(oMap):
+                        CreateImageNode(str(oMap),"Place2"+str(oMap))
+                        cmds.setAttr(str(oMap) + ".fileTextureName", cMapFP + oMapUF + FileType, type="string")
+                    if REngine != 'USD':
+                        cmds.connectAttr(str(oMap) + ".outColor", str(MatName) + str(MatOpacity[REngine]))
+                    else:
+                        cmds.connectAttr(str(oMap) + ".outColorR", str(MatName) + str(MatOpacity[REngine]))
+            except:
+                print("Opacity map fialed")
                 
     else:
         NoNormals.append(MatName)
@@ -1378,6 +1418,41 @@ def setupSkin():
             # mel.eval('hyperShadePanelMenuCommand("hyperShadePanel1", "deleteUnusedNodes");')
             # cmds.delete(str(mat) + '_RM')
 
+def SetupShading(preset):
+    Meshes = cmds.ls(selection=True, dag=True, s=True, ext='mesh')
+    REngine = cmds.optionMenu('render', q=True, v=True)
+    Mats = []
+    # print(Meshes)
+    for mesh in Meshes:
+        SG = cmds.listConnections(mesh, type='shadingEngine')
+        if SG != None and SG != 'None':
+            Material = cmds.ls(cmds.listConnections(SG), materials = True)
+            Mats.append(Material[0])
+    print(Mats)
+    # print(Mats)
+    if preset == 'Plastic':
+        if REngine == 'Redshift':
+            for mat in Mats:
+                cmds.setAttr(mat + '.refl_weight', 0.6)
+                cmds.setAttr(mat + '.refl_brdf', 0)
+                cmds.setAttr(mat + '.refl_fresnel_mode', 3)
+                cmds.setAttr(mat + '.refl_ior', 1.46)
+    if preset == "Cloth":
+        if REngine == 'Redshift':
+            for mat in Mats:
+                cmds.setAttr(mat + '.refl_weight', 0.4)
+                cmds.setAttr(mat + '.refl_brdf', 0)
+                cmds.setAttr(mat + '.refl_fresnel_mode', 3)
+                cmds.setAttr(mat + '.refl_ior', 1.53)
+    if preset == 'Hair':
+        if REngine == 'Redshift':
+            for mat in Mats:
+                cmds.setAttr(mat + '.refl_weight', 0.8)
+                cmds.setAttr(mat + '.refl_brdf', 0)
+                cmds.setAttr(mat + '.refl_fresnel_mode', 3)
+                cmds.setAttr(mat + '.refl_ior', 1.55)
+                cmds.setAttr(mat + '.sheen_weight', 0.4)
+
 WINDOW_TITLE = "Call of Duty Material Tool"
 WINDOW_WIDTH = 400
 
@@ -1550,11 +1625,11 @@ def createWindow():
 
     addDoubleRowLayout()
     addText('Game: ')
-    addOptionMenu("game","", ["Modern Warfare Remastered", "Black Ops 4", "Black Ops Cold War", "Vangaurd", "Modern Warfare II"])
+    addOptionMenu("game","", ["Infinite Warfare", "Modern Warfare Remastered", "Black Ops 4", "Modern Warfare 2019", "Black Ops Cold War", "Vangaurd", "Modern Warfare II"])
     parentToLayout()
     addDoubleRowLayout()
     addText('Assets Folder: ')
-    addFileBrowser("models_path", 2, 'Select the path to your assets folder', PROJECT + '//assets')
+    addFileBrowser("models_path", 2, 'Select the path to your assets folder', PROJECT + '/assets')
     parentToLayout()
 
     addDoubleRowLayout()
@@ -1575,10 +1650,6 @@ def createWindow():
     addDoubleRowLayout()
     addText('Image Type: ')
     addOptionMenu('image_type', '', ["TIFF", "PNG", "DDS"])
-    # newOptionMenu('image_type', '')
-    # addMenuItem('.tiff', 'TIFF')
-    # addMenuItem('.png', 'PNG')
-    # addMenuItem('.dds', 'DDS')
     parentToLayout()
 
     addButton( 'Start', "Main()")
@@ -1586,12 +1657,18 @@ def createWindow():
 
     addFrameColumnLayout('Other Options', True)
     parentToLayout()
-
+    
     # addDoubleRowLayout()
     addSpacer()
     addButton( 'Setup Skin Materials', "setupSkin()")
+    addButton( 'Setup Materials as Plastic', "SetupShading('Plastic')")
+    addButton( 'Setup Materials as Cloth', "SetupShading('Cloth')")
+    addButton( 'Setup Materials as Hair', "SetupShading('Hair')")
     parentToLayout()
     
     cmds.showWindow('windowObject')
+    
+    
+    
 deleteIfOpen()
 createWindow()

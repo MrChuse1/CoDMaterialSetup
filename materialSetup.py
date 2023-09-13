@@ -3,18 +3,16 @@
 ## https://twitter.com/MrChuse
 
 
-## Version 1.0.8.2
+## Version 1.0.8.4
 
-# Fixed issue with gloss maps not working
-# Added option to disable detail maps
-# Added Arnold support for skin materials
-# Added Arnold support for reflection presets
+# Added partial support to textures with long paths
 
 ## This script is designed to convert materials from the Call of Duty games to Maya materials.
 
 
 
 ## TODO
+# Add support for more games with long paths
 # Create json to store settings
 # Check current render engine in R settings
 # Make a plugin?
@@ -55,6 +53,9 @@ Game = ''
 REngine = ''
 NoNormals = []
 PROJECT = cmds.workspace(fn=True)
+cancel = False
+skipLongPaths = False
+renameTextures = False
 MatDiffuse={
     "Redshift":".diffuse_color",
     "Arnold":".baseColor",
@@ -252,7 +253,7 @@ def Main():
         for folder in modelsFolders:
             if not folder.__contains__('.'):
                 models.append(folder)
-        print("Number of models: ", len(models))
+        # print("Number of models: ", len(models))
 
         cmds.progressWindow( title='Material Converter',progress=0,status='Importing...',isInterruptable=True )
         
@@ -300,6 +301,8 @@ def Main():
                         if Game == "Modern Warfare Remastered":
                             SetupMaterialH1()
                         
+                        if cmds.progressWindow(query=True, isCancelled=True) or cancel:
+                            break
                         
                 else:
                     print(MatName, " does not exist.")
@@ -311,7 +314,7 @@ def Main():
             cmds.progressWindow( edit=True, status='Current Model: ' + model)
             cmds.progressWindow( edit=True,progress=int((MatProgress/len(models))* 100))
                         
-            if cmds.progressWindow(query=True, isCancelled=True) == True:
+            if cmds.progressWindow(query=True, isCancelled=True) or cancel:
                 break
         
         cmds.progressWindow(endProgress=1)
@@ -397,7 +400,7 @@ def CreateTex(Tex='', ImageFP='', InTex='', Channel=''):
         # convert to 8 bit channels and merge to RGB image
         Normal = Image.merge('RGB', (NormalX.convert("L"), NormalY.convert("L"), NormalZ.convert("L")))
         
-        print(FP + InTex + "." + (NGO.format).lower())
+        # print(FP + InTex + "." + (NGO.format).lower())
         Normal.save(FP + InTex + "." + (NGO.format).lower())
         
     def CreateRoughnessTex(R):
@@ -456,6 +459,13 @@ def has_transparency(img):
             return True
     return False
 
+def PathCheck(path, texture, name, extension):
+    if renameTextures and len(path + texture + extension) + 2 > 255:
+        os.rename(r'\\?' + '\\' + str(os.path.join(path, texture) + extension).replace("/","\\"), os.path.join('\\?', path, name + extension))
+        # Path((os.path.join(path, texture) + extension)).rename(os.path.join(path, name + extension))
+        return name
+    return texture
+        
 def useGlossCheck():
     if cmds.checkBox('gloss_rough', q=True, v=True):
         return True
@@ -793,6 +803,9 @@ OSLText = '''
 
 def SetupMaterial_S4_IW9():
     global NoNormals
+    global cancel
+    global skipLongPaths
+    global renameTextures
     csMap = ""
     nMap = ""
     gMap = ""
@@ -863,6 +876,21 @@ def SetupMaterial_S4_IW9():
         'Vangaurd': 'unk_semantic_0xB',
         'Modern Warfare II': ''}
     
+    
+    def updateTextFile(cFile, semantic, texture):
+        
+        with open(cFile, 'r') as file:
+            lines = file.readlines()
+            
+        with open(cFile, 'w') as file:
+            for i,line in enumerate(lines):
+                if line.startswith(semantic):
+                    lines[i] = semantic + ',' + texture + '\n'
+                    file.writelines(lines)
+
+        
+        
+        
     cFile = MatDirectory + "/" + MatName + "_images.txt"
     # print("Material: " + MatName)
     textOpen = open(cFile, "r")
@@ -919,8 +947,24 @@ def SetupMaterial_S4_IW9():
     elif cmds.checkBox("image_folder", q=True, v=True) == False:
         cMapFP = MatDirectory + "/_images/"
 
+    # Test if the texture path is too long for Maya
+    if len(cMapFP + csMapUF + FileType) > 255 and skipLongPaths == False:
+        RD = cmds.confirmDialog(title="Error", message="The texture path is too long for Maya. Would you like to rename them?", button=["Yes", "Skip", "Cancel"], defaultButton="Yes", cancelButton="Cancel")
+        if RD == "Yes":
+            renameTextures = True
+            csMapUF = PathCheck(cMapFP, csMapUF, csMap, FileType)
+            updateTextFile(cFile, colorSemantic[Game], csMapUF)
+        elif RD == "Skip":
+            skipLongPaths = True
+
+        elif RD == "Cancel":
+            cancel = True
+            return
+
+
     ## Color Map
-    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black" and isSkinMaterial == False:
+    if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black":
+        print("Color Map: " + csMapUF + " found")
         try:
             if not cmds.objExists(csMap):
                 CreateImageNode(str(csMap),"Place2"+str(csMap))
@@ -939,12 +983,15 @@ def SetupMaterial_S4_IW9():
                     cmds.setAttr(MatName + '.refl_brdf', 1)
             if REngine != 'USD' and REngine != 'RenderManDis':
                 cmds.setAttr(MatName + MatSpec[REngine], 0)
-            # print("Color Layer connected")
+            print("Color Layer connected")
         except:
             print("Color Map failed")
     elif csMap == "$black":
         cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 0, 0, 0)
 
+    ngoMapUF = PathCheck(cMapFP, ngoMapUF, ngoMap, FileType)
+    updateTextFile(cFile, ngoSemantic[Game], ngoMapUF)
+    
     ## Gloss Map
     if os.path.exists(cMapFP + ngoMapUF + FileType) and gMap != "$black":
         try:
@@ -968,7 +1015,7 @@ def SetupMaterial_S4_IW9():
                             cmds.rename(reverseNode, str(ngoMap) + '_reverse')
                             cmds.connectAttr(str(ngoMap) + ".outColorR", str(ngoMap) + '_reverse.inputX')
                             cmds.connectAttr(str(ngoMap) + '_reverse.outputX', str(ngoMap) + "_ramp" + ".vCoord")
-                            print('Reverse Node created: ', reverseNode)
+                            # print('Reverse Node created: ', reverseNode)
                         # cmds.connectAttr(str(ngoMap) + "_ramp" + ".outColorR", MatName + str(MatRough[REngine]))
                         # 
                 if bool(cmds.checkBox("gloss_or_rough", q=True, v=True)) == True:
@@ -992,7 +1039,7 @@ def SetupMaterial_S4_IW9():
         try:
             if REngine == 'USD' or REngine == 'Arnold':
                 if not os.path.exists(cMapFP + nMap + FileType):
-                    CreateTex('Normal', (cMapFP + "\\" + ngoMapUF + FileType), nMap)
+                    CreateTex('Normal', os.path.join(cMapFP, ngoMapUF + FileType), nMap)
             if REngine != 'USD':
                 if not cmds.objExists(str(ngoMap) + '_bump'):
                     if REngine == 'Redshift':
@@ -1105,7 +1152,7 @@ def SetupMaterial_S4_IW9():
                 print("Emmissive map failed")
 
         # ## Opacity Map
-        print(oMap)
+        # print(oMap)
         if os.path.exists(cMapFP + oMapUF + FileType) and oMap != "$black" and oMap != 'ximage_3c29eeff15212c37' and isSkinMaterial == False:
             try:
                 if REngine == 'Redshift' or REngine == 'USD':

@@ -3,15 +3,16 @@
 ## https://twitter.com/MrChuse
 
 
-## Version 1.0.8.4
+Version = '1.0.8.5'
 
-# Added partial support to textures with long paths
+# Added support to seperate metallic and color maps
 
 ## This script is designed to convert materials from the Call of Duty games to Maya materials.
 
 
 
 ## TODO
+# Check Opaciy map for  MW
 # Add support for more games with long paths
 # Create json to store settings
 # Check current render engine in R settings
@@ -237,7 +238,7 @@ def Main():
     global FileType
     global REngine
     
-    MatProgress = 0
+    
     while True:
         modelsPath = cmds.textField("models_path", q=True, tx=True)
         modelsFolders = os.listdir(str(modelsPath))
@@ -259,6 +260,9 @@ def Main():
         
         print(models)
         for model in models:
+            
+            MatProgress = 0
+            cmds.progressWindow( edit=True,progress=int(0))
             
             print("Model: ", model)
             if not model.__contains__('.'):
@@ -304,19 +308,24 @@ def Main():
                         if cmds.progressWindow(query=True, isCancelled=True) or cancel:
                             break
                         
+                        
                 else:
                     print(MatName, " does not exist.")
-                    
+                
+                MatProgress += 1
+                cmds.progressWindow( edit=True,progress=int((MatProgress/len(MatList))* 100))
+                
+                if cmds.progressWindow(query=True, isCancelled=True) or cancel:
+                    break
+                
             MatList.clear()
-            print("Thse Materials have no Normal Maps: \n", NoNormals)
+            
+            
+            if len(NoNormals) > 0:
+                print("Thse Materials have no Normal Maps: \n", NoNormals)
 
-            MatProgress = MatProgress + 1
             cmds.progressWindow( edit=True, status='Current Model: ' + model)
-            cmds.progressWindow( edit=True,progress=int((MatProgress/len(models))* 100))
-                        
-            if cmds.progressWindow(query=True, isCancelled=True) or cancel:
-                break
-        
+            
         cmds.progressWindow(endProgress=1)
         break
 
@@ -399,9 +408,8 @@ def CreateTex(Tex='', ImageFP='', InTex='', Channel=''):
 
         # convert to 8 bit channels and merge to RGB image
         Normal = Image.merge('RGB', (NormalX.convert("L"), NormalY.convert("L"), NormalZ.convert("L")))
-        
-        # print(FP + InTex + "." + (NGO.format).lower())
-        Normal.save(FP + InTex + "." + (NGO.format).lower())
+
+        Normal.save(os.path.join(FP, (InTex + "." + (NGO.format).lower())))
         
     def CreateRoughnessTex(R):
         if Channel == 'R' or Channel == '':
@@ -418,9 +426,7 @@ def CreateTex(Tex='', ImageFP='', InTex='', Channel=''):
         Roughness.save(FP + InTex + "." + (NGO.format).lower())
 
     if Tex == 'Gloss' or Tex == 'Normal':
-        FP = ImageFP.split("\\")
-        FP.remove(FP[-1])
-        FP = "\\".join(FP.copy())
+        FP = ImageFP.removesuffix((os.path.basename(ImageFP)))
         NGO = Image.open(ImageFP)
 
     if Tex == 'Normal':
@@ -460,7 +466,7 @@ def has_transparency(img):
     return False
 
 def PathCheck(path, texture, name, extension):
-    if renameTextures and len(path + texture + extension) + 2 > 255:
+    if renameTextures and len(path + texture + extension) + 2 > 240:
         os.rename(r'\\?' + '\\' + str(os.path.join(path, texture) + extension).replace("/","\\"), os.path.join('\\?', path, name + extension))
         # Path((os.path.join(path, texture) + extension)).rename(os.path.join(path, name + extension))
         return name
@@ -806,22 +812,17 @@ def SetupMaterial_S4_IW9():
     global cancel
     global skipLongPaths
     global renameTextures
-    csMap = ""
-    nMap = ""
-    gMap = ""
+    csMap, csMapUF = "", ""
+    ngoMap, ngoMapUF = "", ""
+    nMap, gMap, oMap = "", "", ""
     eMap = ""
-    oMap = ""
-    dnMask = ""
-    dnMap1 = ""
-    dnMap2 = ""
-    dnMap3 = ""
-    ngoMapUF = ""
+    dnMask, dnMaskUF = "", ""
+    dnMap1, dnMap1UF = "", ""
+    dnMap2, dnMap2UF = "", ""
+    dnMap3, dnMap3UF = "", ""
     eMapUF = ""
     oMapUF = ""
-    dnMaskUF = ""
-    dnMap1UF = ""
-    dnMap2UF = ""
-    dnMap3UF = ""
+    
     isSkinMaterial = False
 
     colorSemantic = {
@@ -905,7 +906,8 @@ def SetupMaterial_S4_IW9():
         sList.append(semantic_temp)
         # print(semantic_temp)
         i = i + 1
-    sList[0].remove("semantic")
+    if len(sList) > 1:
+        sList[0].remove("semantic")
     # print(sList)
     i=0
     for elements in sList:
@@ -913,9 +915,9 @@ def SetupMaterial_S4_IW9():
             csMap = sList[i][1].partition("&")[0]
             csMapUF = sList[i][1]
         elif sList[i][0] == ngoSemantic[Game]:
-            ngoMap = sList[i][1].replace('~','').partition("&")[0] + 'go'
+            ngoMap = sList[i][1].replace('~','').partition("&")[0].removesuffix('_n') + '_ngo'
             ngoMapUF = sList[i][1]
-            nMap = sList[i][1].replace('~','').partition("&")[0]
+            nMap = sList[i][1].replace('~','').partition("&")[0].removesuffix('_n') + '_n'
             gMap = sList[i][1].partition("&")[2].partition("~")[0]
         elif sList[i][0] == emmisiveSemantic[Game]:
             eMap = sList[i][1].partition("~")[0]
@@ -948,7 +950,7 @@ def SetupMaterial_S4_IW9():
         cMapFP = MatDirectory + "/_images/"
 
     # Test if the texture path is too long for Maya
-    if len(cMapFP + csMapUF + FileType) > 255 and skipLongPaths == False:
+    if len(cMapFP + csMapUF + FileType) > 255 and skipLongPaths == False and not bool(cmds.checkBox("split_metallic", q=True, v=True)):
         RD = cmds.confirmDialog(title="Error", message="The texture path is too long for Maya. Would you like to rename them?", button=["Yes", "Skip", "Cancel"], defaultButton="Yes", cancelButton="Cancel")
         if RD == "Yes":
             renameTextures = True
@@ -964,30 +966,43 @@ def SetupMaterial_S4_IW9():
 
     ## Color Map
     if os.path.exists(cMapFP + csMapUF + FileType) and csMap != "$black":
-        print("Color Map: " + csMapUF + " found")
+        # print("Color Map: " + csMapUF + " found")
         try:
             if not cmds.objExists(csMap):
                 CreateImageNode(str(csMap),"Place2"+str(csMap))
                 cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMapUF + FileType, type="string")
-            if REngine == 'Redshift':
+            if REngine in ['Redshift', 'Arnold']:
                 cmds.setAttr(MatName + MatSheen[REngine], 0.1)
-            if REngine == 'Arnold':
-                cmds.setAttr(MatName + MatSheen[REngine], 0.1)
-            if REngine == 'RenderManDis':
+            elif REngine == 'RenderManDis':
                 cmds.setAttr(MatName + MatSheen[REngine], 0.4)
             cmds.connectAttr(str(csMap) + ".outColor", MatName + str(MatDiffuse[REngine]))
+            
             if has_transparency(Image.open(cMapFP + csMapUF + FileType)):
-                cmds.connectAttr(str(csMap) + ".outAlpha", MatName + MatMetallic[REngine])
+                if bool(cmds.checkBox("split_metallic", q=True, v=True)):
+                    print("Seperate Metallic")
+                    if not os.path.exists(cMapFP + csMapUF + '_metal' + FileType):
+                        seperateMetallic(cMapFP, csMapUF, FileType, csMap)
+                    
+                    CreateImageNode(str(csMap) + '_metal',"Place2"+str(csMap) + '_metal')
+                    cmds.setAttr(str(csMap) + '_metal' + ".fileTextureName", cMapFP + csMap[:-2] + '_metal' + FileType, type="string")
+                    cmds.setAttr(str(csMap) + '_metal' + ".colorSpace", "Raw", type="string")
+                    cmds.setAttr(str(csMap) + ".fileTextureName", cMapFP + csMap + FileType, type="string")
+                    cmds.connectAttr(str(csMap) + '_metal' + ".outColorR", MatName + MatMetallic[REngine])
+                    
+                else:
+                    cmds.connectAttr(str(csMap) + ".outAlpha", MatName + MatMetallic[REngine])
                 if REngine == 'Redshift':
                     cmds.setAttr(MatName + '.refl_fresnel_mode', 2)
                     cmds.setAttr(MatName + '.refl_brdf', 1)
             if REngine != 'USD' and REngine != 'RenderManDis':
                 cmds.setAttr(MatName + MatSpec[REngine], 0)
-            print("Color Layer connected")
+            # print("Color Layer connected")
         except:
             print("Color Map failed")
     elif csMap == "$black":
         cmds.setAttr(str(MatName) + str(MatDiffuse[REngine]), 0, 0, 0)
+    else:
+        print("Color Map: " + (cMapFP + csMapUF + FileType) + " not found")
 
     ngoMapUF = PathCheck(cMapFP, ngoMapUF, ngoMap, FileType)
     updateTextFile(cFile, ngoSemantic[Game], ngoMapUF)
@@ -1431,7 +1446,22 @@ def checkREngine(engines:list):
     for engine in engines:
         if engine == REngine:
             return True
-        
+
+def seperateMetallic(Path, file, format, name):
+    # Open the image
+
+    image = Image.open(os.path.join(Path, file + format))
+    
+    # Save the alpha channel as a separate image
+    alpha = image.split()[-1]
+    alpha.save(os.path.join(Path, str(name).removesuffix('_c') + '_metal' + format))
+
+    # Remove alpha and save
+    if not os.path.exists(os.path.join(Path, name + format)):
+        image = image.convert('RGB')
+        image.save(os.path.join(Path, name + format))
+    
+    
 def setupSkin():
 
     # If the render engine isn't supported
@@ -1509,6 +1539,20 @@ def setupSkin():
                 cmds.setAttr(colorCorrectNode + '.saturation', 1.3)
             else:
                 colorCorrectNode = str(mat) + '_ColorCorrect'
+            
+            # Remove the metalness
+            if cmds.listConnections(mat + ".metalness"):
+                cmds.disconnectAttr(cmds.listConnections(mat + ".metalness", plugs=True)[0], mat + ".metalness")
+            cmds.setAttr(mat + ".metalness", 0)
+            
+            # Set the specular
+            cmds.setAttr(mat + ".specular", 0.6)
+            
+            # Set the ior
+            cmds.setAttr(mat + ".specularIOR", 1.44)
+            
+            # Set the sheen
+            cmds.setAttr(mat + ".sheen", 0)
             
             # Connect the color correct node to the material
             cmds.connectAttr(colorCorrectNode + '.outColor', str(mat) + '.subsurfaceColor', force=True)
@@ -1588,21 +1632,39 @@ def SetupShading(preset):
                 Mats.append(meshMat)
 
     for mat in Mats:
-        
+        try:
             if preset == 'Plastic':
                     checkSetAttr(mat + MatSpec[REngine], 0.6)
                     checkSetAttr(mat + MatIOR[REngine], 1.46)
                     checkSetAttr(mat + MatRough[REngine], 0.6)
                     setRedshiftIOR(mat, REngine)
             elif preset == 'Cloth':
-                    checkSetAttr(mat + MatSpec[REngine], 0)
-                    checkSetAttr(mat + MatSheen[REngine], 0.4)
+                    checkSetAttr(mat + MatSpec[REngine], 0.4)
+                    checkSetAttr(mat + MatIOR[REngine], 1.53)
                     checkSetAttr(mat + MatSheenRough[REngine], 0.8)
+                    
+                    checkSetAttr(mat + MatSheen[REngine], 0.2)
+                    if REngine == 'Arnold':
+                        facingNode = cmds.createNode('aiFacingRatio', name=mat + '_FacingRatio')
+                        cmds.setAttr(facingNode + '.invert', 1)
+                        cmds.setAttr(facingNode + '.bias', 0.95)
+                        cmds.setAttr(facingNode + '.gain', 0.6)
+                        cmds.connectAttr(facingNode + '.outValue', mat + '.sheenColorR')
+                        cmds.connectAttr(facingNode + '.outValue', mat + '.sheenColorG')
+                        cmds.connectAttr(facingNode + '.outValue', mat + '.sheenColorB')
             elif preset == 'Hair':
                     checkSetAttr(mat + MatSpec[REngine], 0.8)
                     checkSetAttr(mat + MatIOR[REngine], 1.55)
                     checkSetAttr(mat + MatRough[REngine], 0.8)
+                    checkSetAttr(mat + MatSheen[REngine], 0.15)
+                    checkSetAttr(mat + MatSheenRough[REngine], 0.8)
                     setRedshiftIOR(mat, REngine)
+            elif preset == 'Eyes':
+                    checkSetAttr(mat + MatSpec[REngine], 1)
+                    checkSetAttr(mat + MatRough[REngine], 0.17)
+                    checkSetAttr(mat + MatSheen[REngine], 0)
+        except:
+            continue
             
             
 
@@ -1768,7 +1830,7 @@ def createWindow():
     addSpacer()
     addHeader('Call of Duty Material Setup')
     addText('Material Setup Tool for Call of Duty models')
-    cmds.text(label='<span style=\"color:#ccc;text-decoration:none;font-size:px;font-family:courier new;font-weight:bold;\">' + "Created by <a href=\"https://twitter.com/MrChuse\" style=\"color:purple\"> MrChuse</a>" + '</span>', hyperlink=True)
+    cmds.text(label='<span style=\"color:#ccc;text-decoration:none;font-size:px;font-family:courier new;font-weight:bold;\">' + f"Version {Version} " + "Created by <a href=\"https://twitter.com/MrChuse\" style=\"color:purple\"> MrChuse</a>" + '</span>', hyperlink=True)
     addSpacer()
         
     addDoubleRowLayout()
@@ -1798,11 +1860,6 @@ def createWindow():
     parentToLayout()
 
     addDoubleRowLayout()
-    addSpacer()
-    addCheckbox("enable_alpha", 'Connect Alpha Channels')
-    parentToLayout()
-
-    addDoubleRowLayout()
     addText('Image Type: ')
     addOptionMenu('image_type', '', ["TIFF", "PNG", "DDS"])
     parentToLayout()
@@ -1825,6 +1882,16 @@ def createWindow():
 
     cmds.checkBox('enable_detail', label='Connect Detail Maps', parent=menuAdvancedGrid, value=True)
 
+    # addDoubleRowLayout()
+    # addSpacer()
+    
+    # parentToLayout()
+    
+    addDoubleRowLayout()
+    addCheckbox("enable_alpha", 'Connect Alpha', value=True)
+    addCheckbox("split_metallic", 'Seperate Metallic Texture')
+    parentToLayout()
+    
     # addCheckbox("enable_detail", 'Connect Alpha Channels')
     # parentToLayout()
 
@@ -1839,6 +1906,7 @@ def createWindow():
     addButton( 'Setup Materials as Plastic', "SetupShading('Plastic')")
     addButton( 'Setup Materials as Cloth', "SetupShading('Cloth')")
     addButton( 'Setup Materials as Hair', "SetupShading('Hair')")
+    addButton( 'Setup Materials as Eyes', "SetupShading('Eyes')")
     parentToLayout()
     
     cmds.showWindow('windowObject')
